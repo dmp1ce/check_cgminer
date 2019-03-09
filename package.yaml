@@ -1,0 +1,68 @@
+name:                check-cgminer
+version:             0.1.0.0
+github:              "githubuser/check-cgminer"
+license:             PublicDomain
+author:              "Author name here"
+maintainer:          "example@example.com"
+copyright:           "2019 Author name here"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/githubuser/check-cgminer#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- nagios-check
+- optparse-applicative
+- text
+- network-simple
+- aeson
+- bytestring
+- monad-loops
+- containers
+- vector
+
+default-extensions:
+  - OverloadedStrings
+  - DeriveGeneric
+
+library:
+  source-dirs: src
+  ghc-options: -Wall -Werror -O2
+
+executables:
+  check_cgminer:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -Wall
+    - -Werror
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - check-cgminer
+
+tests:
+  check-cgminer-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -Wall
+    - -Werror
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - check-cgminer
+    - tasty
+    - tasty-hunit
