@@ -9,6 +9,7 @@ import Data.Aeson ( ToJSON, FromJSON, toEncoding, genericToEncoding
 import Data.Aeson.Types (parseEither)
 import Data.ByteString.Lazy (ByteString, stripSuffix)
 import Data.Vector ( (!?) )
+import qualified Data.Text as T
 
 data QueryApi = QueryApi
   { command :: Text
@@ -27,8 +28,8 @@ instance FromJSON ReplyApi where
     <$> v .: "STATUS"
     <*> v .: "STATS"
 
-data Tempuratures = Tempuratures (Rational, Rational) (Rational, Rational) (Rational, Rational)
-  deriving (Show, Eq)
+type Tempurature = (T.Text, Rational)
+type Tempuratures = [Tempurature]
 
 -- | Decode reply if possible
 decodeReply :: ByteString -> Maybe ReplyApi
@@ -53,6 +54,10 @@ getTemps reply = flip parseEither reply $ \r -> do
   (Number temp2_7) <- rawStats .: "temp2_7"
   (Number temp2_8) <- rawStats .: "temp2_8"
 
-  return $ Tempuratures (toRational temp6, toRational temp2_6)
-                        (toRational temp7, toRational temp2_7)
-                        (toRational temp8, toRational temp2_8)
+  return $ [ ("temp6", toRational temp6)
+           , ("temp2_6", toRational temp2_6)
+           , ("temp7", toRational temp7)
+           , ("temp2_7", toRational temp2_7)
+           , ("temp8", toRational temp8)
+           , ("temp2_8", toRational temp2_8)
+           ]

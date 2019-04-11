@@ -1,22 +1,24 @@
 import Test.Tasty ( defaultMain, TestTree, testGroup )
-import Test.Tasty.HUnit ( testCase, (@?=), (@?))
+import Test.Tasty.HUnit ( testCase, (@?=), (@?) )
 
 import Data.ByteString.Lazy (ByteString)
 import Data.Aeson (encode)
 
-import CgminerApi (QueryApi (QueryApi), decodeReply, getTemps, Tempuratures (Tempuratures))
+import CgminerApi (QueryApi (QueryApi), decodeReply, getTemps)
+import CheckCgminer (anyTempsAreZero, anyTempsAboveThreshold)
+import qualified Data.Text as T
 
 main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Tests" [json]
+tests = testGroup "Tests" [json, checks]
 
 exampleSummaryCommand :: ByteString
 exampleSummaryCommand = "{\"command\":\"summary\",\"parameter\":\"0\"}"
 
 json :: TestTree
-json = testGroup "Unit tests"
+json = testGroup "json tests"
 
   [ testCase "encode QueryApi should match example command text" $
     (encode $ QueryApi "summary" "0") @?= exampleSummaryCommand
@@ -24,7 +26,25 @@ json = testGroup "Unit tests"
     ((decodeReply exampleReply) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get temps" $
       let Just x = decodeReply exampleReply
-      in (getTemps x) @?= (Right $ Tempuratures (59, 75) (54, 71) (55, 74))
+      in (getTemps x) @?= (Right [ ("temp6"::T.Text, 59::Rational)
+                                 , ("temp2_6"::T.Text, 75)
+                                 , ("temp7", 54)
+                                 , ("temp2_7", 71)
+                                 , ("temp8", 55)
+                                 , ("temp2_8", 74)
+                                 ])
+  ]
+
+checks :: TestTree
+checks = testGroup "checks to perform tests"
+  [ testCase "Detect temperatures when at zero" $
+    (anyTempsAreZero ([("", 0),("",55),("",5.5),("",33), ("",0),("",34)]) @?= True)
+  , testCase "Don't detect zero when temperatures NOT at zero" $
+    (anyTempsAreZero ([("",1),("",55),("",5.5),("",33), ("",2), ("",34)]) @?= False)
+  , testCase "Don't detect temps when below threshold" $
+    (anyTempsAboveThreshold ([("",1),("",55)]) (10000.0::Rational) @?= False)
+  , testCase "Detect temps when above threshold" $
+    (anyTempsAboveThreshold ([("",1),("",55),("",200)]) 100 @?= True)
   ]
 
 -- Example command used to get summary from cgminer
