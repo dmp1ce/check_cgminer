@@ -81,18 +81,18 @@ minimumTempThreshold = 20
 checkTemps :: Tempuratures -> Rational -> Rational -> NagiosPlugin ()
 checkTemps temps tw tc = do
   let maxTemp = maximum $ snd <$> temps
-  addResult OK $ "Max temp " <> (T.pack . show) (toDouble maxTemp) <> " C°"
+  addResult OK $ "Max temp " <> (T.pack . show) (toDouble maxTemp) <> " C"
 
   if anyTempsAreZero temps
-  then addResult Warning "At least one tempurature at 0°"
+  then addResult Warning "At least one tempurature at 0 C"
   else return ()
 
   if anyTempsAboveThreshold temps tc
-  then addResult Critical $ "Temperature exceeds critical threshold of " <> (T.pack . show) (toDouble tc) <> " C°"
+  then addResult Critical $ "Temperature exceeds critical threshold of " <> (T.pack . show) (toDouble tc) <> " C"
   else return ()
 
   if anyTempsAboveThreshold temps tw
-  then addResult Warning $ "Temperature exceeds warning threshold of " <> (T.pack . show) (toDouble tw) <> " C°"
+  then addResult Warning $ "Temperature exceeds warning threshold of " <> (T.pack . show) (toDouble tw) <> " C"
   else return ()
 
   mapM_ (\temp -> do
