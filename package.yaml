@@ -30,6 +30,7 @@ dependencies:
 - monad-loops
 - containers
 - vector
+- scientific
 
 default-extensions:
   - OverloadedStrings
