@@ -1,3 +1,10 @@
-# Changelog for check-cgminer
+# Changelog for check_cgminer
 
-## Unreleased changes
+## 0.2.0.0
+
+- Add support for hashrate monitoring
+- Add version switch
+
+## 0.1.0.0
+
+- Add support for temperature monitoring

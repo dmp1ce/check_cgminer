@@ -1,23 +1,22 @@
 name:                check-cgminer
-version:             0.1.0.0
-github:              "githubuser/check-cgminer"
+version:             0.2.0.0
+github:              "dmp1ce/check_cgminer"
 license:             PublicDomain
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2019 Author name here"
+author:              "David Parrish"
+maintainer:          "daveparrish@tutanota.com"
 
 extra-source-files:
 - README.md
 - ChangeLog.md
 
 # Metadata used when publishing your package
-# synopsis:            Short description of your package
-# category:            Web
+synopsis:            Monitoring plugin for cgminer devices
+category:            Monitoring
 
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/githubuser/check-cgminer#readme>
+description:         Please see the README on GitHub at <https://github.com/dmp1ce/check_cgminer#readme>
 
 dependencies:
 - base >= 4.7 && < 5
