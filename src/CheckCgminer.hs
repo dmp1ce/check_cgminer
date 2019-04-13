@@ -10,7 +10,7 @@ import System.Nagios.Plugin ( runNagiosPlugin, addResult, CheckStatus (OK, Unkno
                             , addPerfDatum, PerfValue (RealValue), UOM (NullUnit) )
 import Options.Applicative
   ( execParser, info, header, progDesc, fullDesc, helper, Parser, option, long, short, metavar
-  , value, help, str, auto, showDefault, switch )
+  , value, help, str, auto, showDefault, infoOption)
 import Network.Simple.TCP (connect, send, recv)
 import Data.Aeson (encode)
 import Data.ByteString.Lazy (toStrict, fromStrict)
@@ -23,8 +23,7 @@ import Data.Version (showVersion)
 import CgminerApi ( QueryApi (QueryApi), getStats, decodeReply, Temperatures, Stats, HashRates)
 
 data CliOptions = CliOptions
-  { _version :: Bool
-  , host :: String
+  { host :: String
   , port :: String
   , temp_warning :: Double
   , temp_error :: Double
@@ -43,8 +42,8 @@ defaultHashRateCriticalThreshold = 3000
 
 cliOptions :: Parser CliOptions
 cliOptions = CliOptions
-  <$> switch ( long "version" <> short 'v' <> help "Show version information" )
-  <*> option str
+  -- <$> infoOption "Some version" ( long "version" <> short 'v' <> help "Show version information" )
+  <$> option str
       ( long "host"
      <> short 'H'
      <> metavar "HOST"
@@ -155,8 +154,7 @@ checkStats (temps,hashrates) tw tc hw hc = do
     toDouble = fromRational
 
 execCheck :: CliOptions -> IO ()
-execCheck (CliOptions True _ _ _ _ _ _) = putStrLn $ "check_cgminer v" ++ showVersion version
-execCheck (CliOptions _ h p tw tc hw hc) = do
+execCheck (CliOptions h p tw tc hw hc) = do
   r <- connect h p $ \(connectionSocket, _) -> do
     send connectionSocket $ toStrict . encode $ QueryApi "stats" "0"
     mconcat <$> unfoldWhileM ((/=) Nothing) (recv connectionSocket 4096)
@@ -176,7 +174,9 @@ execCheck (CliOptions _ h p tw tc hw hc) = do
 mainExecParser :: IO ()
 mainExecParser = execParser opts >>= execCheck
   where
-    opts = info (helper <*> cliOptions)
+    opts = info (helper <*> versionOption <*> cliOptions)
       ( fullDesc
      <> progDesc "Return Nagios formatted string based cgminer API returned values"
      <> header "check_cgminer - Nagios monitoring plugin for cgminer API" )
+    versionOption = infoOption ("check_cgminer " ++ showVersion version)
+      ( long "version" <> short 'v' <> help "Show version information" )
