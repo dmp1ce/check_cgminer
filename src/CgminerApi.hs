@@ -30,11 +30,13 @@ instance FromJSON ReplyApi where
     <$> v .: "STATUS"
     <*> v .: "STATS"
 
-type Stats = (Temperatures, HashRates)
-type Temperature = (T.Text, Rational)
-type Temperatures = [Temperature]
-type HashRate = (T.Text, Rational)
-type HashRates = [HashRate]
+data Stats = Stats { tempuratures :: TextRationalPairs
+                   , hashrates :: TextRationalPairs
+                   , fanspeeds :: TextRationalPairs
+                   }
+  deriving (Eq, Show)
+type TextRationalPairs = [TextRationalPair]
+type TextRationalPair = (T.Text, Rational)
 
 -- | Decode reply if possible
 decodeReply :: ByteString -> Maybe ReplyApi
@@ -58,6 +60,8 @@ getStats reply = flip parseEither reply $ \r -> do
   (Number temp2_6) <- rawStats .: "temp2_6"
   (Number temp2_7) <- rawStats .: "temp2_7"
   (Number temp2_8) <- rawStats .: "temp2_8"
+  (Number fan5) <- rawStats .: "fan5"
+  (Number fan6) <- rawStats .: "fan6"
   (String chain_rate6_text) <- rawStats .: "chain_rate6"
   (String chain_rate7_text) <- rawStats .: "chain_rate7"
   (String chain_rate8_text) <- rawStats .: "chain_rate8"
@@ -66,16 +70,19 @@ getStats reply = flip parseEither reply $ \r -> do
   chain_rate7 <- textToRational chain_rate7_text
   chain_rate8 <- textToRational chain_rate8_text
 
-  return $ ([ ("temp6", toRational temp6)
+  return $ (Stats [ ("temp6", toRational temp6)
             , ("temp2_6", toRational temp2_6)
             , ("temp7", toRational temp7)
             , ("temp2_7", toRational temp2_7)
             , ("temp8", toRational temp8)
             , ("temp2_8", toRational temp2_8)
             ]
-           ,[ ("chain_rate6", chain_rate6)
+            [ ("chain_rate6", chain_rate6)
             , ("chain_rate7", chain_rate7)
             , ("chain_rate8", chain_rate8)
+            ]
+            [ ("fan5", toRational fan5)
+            , ("fan6", toRational fan6)
             ]
            )
   where

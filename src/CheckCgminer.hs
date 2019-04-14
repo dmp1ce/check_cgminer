@@ -20,7 +20,7 @@ import Data.Ratio (approxRational)
 import Paths_check_cgminer (version)
 import Data.Version (showVersion)
 
-import CgminerApi ( QueryApi (QueryApi), getStats, decodeReply, Temperatures, Stats, HashRates)
+import CgminerApi ( QueryApi (QueryApi), getStats, decodeReply, Stats (Stats), TextRationalPairs)
 
 data CliOptions = CliOptions
   { host :: String
@@ -29,6 +29,8 @@ data CliOptions = CliOptions
   , temp_error :: Double
   , hashrate_warning :: Double
   , hashrate_error :: Double
+  , fanspeed_warning :: Double
+  , fanspeed_error :: Double
   }
 
 defaultTempWarningThreshold :: Double
@@ -39,10 +41,13 @@ defaultHashRateWarningThreshold :: Double
 defaultHashRateWarningThreshold = 4000
 defaultHashRateCriticalThreshold :: Double
 defaultHashRateCriticalThreshold = 3000
+defaultFanSpeedWarningThreshold :: Double
+defaultFanSpeedWarningThreshold = 4000
+defaultFanSpeedCriticalThreshold :: Double
+defaultFanSpeedCriticalThreshold = 3000
 
 cliOptions :: Parser CliOptions
 cliOptions = CliOptions
-  -- <$> infoOption "Some version" ( long "version" <> short 'v' <> help "Show version information" )
   <$> option str
       ( long "host"
      <> short 'H'
@@ -91,13 +96,30 @@ cliOptions = CliOptions
      <> help "Critical hash rate threshold in Gh/s"
      <> showDefault
       )
+  <*> option auto
+      ( long "fan_warn"
+     <> short 'f'
+     <> metavar "NUMBER"
+     <> value defaultFanSpeedWarningThreshold
+     <> help "Warning fan speed threshold in RPMs"
+     <> showDefault
+      )
+  <*> option auto
+      ( long "han_crit"
+     <> short 'F'
+     <> metavar "NUMBER"
+     <> value defaultFanSpeedCriticalThreshold
+     <> help "Critical fan speed threshold in RPMs"
+     <> showDefault
+      )
 
-anyTempsAreZero :: Temperatures -> Bool
+
+anyTempsAreZero :: TextRationalPairs -> Bool
 anyTempsAreZero = any ((== 0) . snd)
-anyTempsAboveThreshold :: Temperatures -> Rational -> Bool
-anyTempsAboveThreshold temps m = any ((>= m) . snd) temps
-anyHashRatesBelowThreshold :: HashRates -> Rational -> Bool
-anyHashRatesBelowThreshold h m = any ((<= m) . snd) h
+anyAboveThreshold :: TextRationalPairs -> Rational -> Bool
+anyAboveThreshold t m = any ((>= m) . snd) t
+anyBelowThreshold :: TextRationalPairs -> Rational -> Bool
+anyBelowThreshold h m = any ((<= m) . snd) h
 
 maximumTempThreshold :: Double
 maximumTempThreshold = 120
@@ -107,43 +129,60 @@ maximumHashRateThreshold :: Double
 maximumHashRateThreshold = 10000
 minimumHashRateThreshold :: Double
 minimumHashRateThreshold = 0
+maximumFanSpeedThreshold :: Double
+maximumFanSpeedThreshold = 10000
+minimumFanSpeedThreshold :: Double
+minimumFanSpeedThreshold = 0
 
-checkStats :: Stats -> Rational -> Rational -> Rational -> Rational -> NagiosPlugin ()
-checkStats (temps,hashrates) tw tc hw hc = do
+data Thresholds = Thresholds Rational Rational Rational Rational Rational Rational
+
+checkStats :: Stats -> Thresholds -> NagiosPlugin ()
+checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc fw fc) = do
   let maxTemp = maximum $ snd <$> temps
   let minHashRates = minimum $ snd <$> hashrates
   addResult OK
-     $ "Max temp " <> (T.pack . show) (toDouble maxTemp) <> " C "
-    <> "Min hashrate " <> (T.pack . show) (toDouble minHashRates)
+     $ "Max temp: " <> (T.pack . show) (toDouble maxTemp) <> " C, "
+    <> "Min hashrate: " <> (T.pack . show) (toDouble minHashRates) <> " Ghs, "
+    <> "Min fanspeed: " <> (T.pack . show) (toDouble $ minimum $ snd <$> fanspeeds) <> " RPM"
 
   if anyTempsAreZero temps
   then addResult Warning "At least one temperature at 0 C"
   else return ()
 
-  if anyTempsAboveThreshold temps tc
+  if anyAboveThreshold temps tc
   then addResult Critical $ "Temperature exceeds critical threshold of " <> (T.pack . show) (toDouble tc) <> " C"
   else return ()
 
-  if anyTempsAboveThreshold temps tw
+  if anyAboveThreshold temps tw
   then addResult Warning $ "Temperature exceeds warning threshold of " <> (T.pack . show) (toDouble tw) <> " C"
   else return ()
 
-  if anyHashRatesBelowThreshold hashrates hc
-  then addResult Critical $ "Hashrate exceeds critical threshold of " <> (T.pack . show) (toDouble hc) <> " Gh"
+  if anyBelowThreshold hashrates hc
+  then addResult Critical $ "Hashrate exceeds critical threshold of " <> (T.pack . show) (toDouble hc) <> " Ghs"
   else return ()
 
-  if anyHashRatesBelowThreshold hashrates hw
-  then addResult Warning $ "Hashrate exceeds warning threshold of " <> (T.pack . show) (toDouble hw) <> " Gh"
+  if anyBelowThreshold hashrates hw
+  then addResult Warning $ "Hashrate exceeds warning threshold of " <> (T.pack . show) (toDouble hw) <> " Ghs"
+  else return ()
+
+  if anyBelowThreshold fanspeeds fc
+  then addResult Critical $ "Fan speed exceeds critical threshold of " <> (T.pack . show) (toDouble fc) <> " RPM"
+  else return ()
+
+  if anyBelowThreshold fanspeeds fw
+  then addResult Warning $ "Fan speed exceeds warning threshold of " <> (T.pack . show) (toDouble fw) <> " RPM"
   else return ()
 
   -- Go through each measurement and it to performance data output
   mapMPerfData addTempData temps
   mapMPerfData addHashData hashrates
+  mapMPerfData addFanData fanspeeds
 
   where
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
     addTempData s t = addPerfData s t minimumTempThreshold maximumTempThreshold tw tc
     addHashData s t = addPerfData s t minimumHashRateThreshold maximumHashRateThreshold hw hc
+    addFanData s t = addPerfData s t minimumFanSpeedThreshold maximumFanSpeedThreshold fw fc
 
     addPerfData s t mint maxt w c = addPerfDatum s (RealValue $ fromRational t) NullUnit
                               (Just $ RealValue mint) (Just $ RealValue maxt)
@@ -154,7 +193,7 @@ checkStats (temps,hashrates) tw tc hw hc = do
     toDouble = fromRational
 
 execCheck :: CliOptions -> IO ()
-execCheck (CliOptions h p tw tc hw hc) = do
+execCheck (CliOptions h p tw tc hw hc fw fc) = do
   r <- connect h p $ \(connectionSocket, _) -> do
     send connectionSocket $ toStrict . encode $ QueryApi "stats" "0"
     mconcat <$> unfoldWhileM ((/=) Nothing) (recv connectionSocket 4096)
@@ -166,8 +205,9 @@ execCheck (CliOptions h p tw tc hw hc) = do
     let Just r' = fromStrict <$> r
     let Just (Right stats) = getStats <$> decodeReply r'
 
-    runNagiosPlugin $ checkStats stats (appRat tw) (appRat tc)
-                                       (appRat hw) (appRat hc)
+    runNagiosPlugin $ checkStats stats $ Thresholds (appRat tw) (appRat tc)
+                                                    (appRat hw) (appRat hc)
+                                                    (appRat fw) (appRat fc)
   where
     appRat v = approxRational v 0.0001
 

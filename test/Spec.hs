@@ -4,8 +4,8 @@ import Test.Tasty.HUnit ( testCase, (@?=), (@?) )
 import Data.ByteString.Lazy (ByteString)
 import Data.Aeson (encode)
 
-import CgminerApi (QueryApi (QueryApi), decodeReply, getStats)
-import CheckCgminer (anyTempsAreZero, anyTempsAboveThreshold, anyHashRatesBelowThreshold)
+import CgminerApi (QueryApi (QueryApi), decodeReply, getStats, Stats (Stats))
+import CheckCgminer (anyTempsAreZero, anyAboveThreshold, anyBelowThreshold)
 import qualified Data.Text as T
 
 main :: IO ()
@@ -26,18 +26,21 @@ json = testGroup "json tests"
     ((decodeReply exampleReply) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats" $
       let Just x = decodeReply exampleReply
-      in (getStats x) @?= (Right ([ ("temp6"::T.Text, 59::Rational)
-                                  , ("temp2_6"::T.Text, 75)
-                                  , ("temp7", 54)
-                                  , ("temp2_7", 71)
-                                  , ("temp8", 55)
-                                  , ("temp2_8", 74)
-                                 ]
-                                 ,[ ("chain_rate6",4524.28)
-                                  , ("chain_rate7",4679.16)
-                                  , ("chain_rate8",4550.58)
-                                  ]
-                                 ))
+      in (getStats x) @?= (Right $ Stats
+                           [ ("temp6"::T.Text, 59::Rational)
+                           , ("temp2_6"::T.Text, 75)
+                           , ("temp7", 54)
+                           , ("temp2_7", 71)
+                           , ("temp8", 55)
+                           , ("temp2_8", 74)
+                           ]
+                           [ ("chain_rate6",4524.28)
+                           , ("chain_rate7",4679.16)
+                           , ("chain_rate8",4550.58)
+                           ]
+                           [ ("fan5",5040)
+                           , ("fan6",3600)
+                           ])
   ]
 
 checks :: TestTree
@@ -47,13 +50,13 @@ checks = testGroup "checks to perform tests"
   , testCase "Don't detect zero when temperatures NOT at zero" $
     (anyTempsAreZero ([("",1),("",55),("",5.5),("",33), ("",2), ("",34)]) @?= False)
   , testCase "Don't detect temps when below threshold" $
-    (anyTempsAboveThreshold ([("",1),("",55)]) (10000.0::Rational) @?= False)
+    (anyAboveThreshold ([("",1),("",55)]) (10000.0::Rational) @?= False)
   , testCase "Detect temps when above threshold" $
-    (anyTempsAboveThreshold ([("",1),("",55),("",200)]) 100 @?= True)
+    (anyAboveThreshold ([("",1),("",55),("",200)]) 100 @?= True)
   , testCase "Detect hashrates when below threshold" $
-    (anyHashRatesBelowThreshold) [("", 10), ("",100), ("",44)] 50 @?= True
+    (anyBelowThreshold) [("", 10), ("",100), ("",44)] 50 @?= True
   , testCase "Don't detect hashrates when above threshold" $
-    (anyHashRatesBelowThreshold) [("", 10), ("",100), ("",44)] 2 @?= False
+    (anyBelowThreshold) [("", 10), ("",100), ("",44)] 2 @?= False
   ]
 
 -- Example command used to get summary from cgminer
