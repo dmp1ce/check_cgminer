@@ -29,8 +29,10 @@ data CliOptions = CliOptions
   , temp_error :: Double
   , hashrate_warning :: Double
   , hashrate_error :: Double
-  , fanspeed_warning :: Double
-  , fanspeed_error :: Double
+  , fanspeed_low_warning :: Double
+  , fanspeed_low_error :: Double
+  , fanspeed_high_warning :: Double
+  , fanspeed_high_error :: Double
   }
 
 defaultTempWarningThreshold :: Double
@@ -41,10 +43,14 @@ defaultHashRateWarningThreshold :: Double
 defaultHashRateWarningThreshold = 4000
 defaultHashRateCriticalThreshold :: Double
 defaultHashRateCriticalThreshold = 3000
-defaultFanSpeedWarningThreshold :: Double
-defaultFanSpeedWarningThreshold = 4000
-defaultFanSpeedCriticalThreshold :: Double
-defaultFanSpeedCriticalThreshold = 3000
+defaultFanSpeedLowWarningThreshold :: Double
+defaultFanSpeedLowWarningThreshold = 999
+defaultFanSpeedLowCriticalThreshold :: Double
+defaultFanSpeedLowCriticalThreshold = 500
+defaultFanSpeedHighWarningThreshold :: Double
+defaultFanSpeedHighWarningThreshold = 9000
+defaultFanSpeedHighCriticalThreshold :: Double
+defaultFanSpeedHighCriticalThreshold = 10000
 
 cliOptions :: Parser CliOptions
 cliOptions = CliOptions
@@ -97,22 +103,37 @@ cliOptions = CliOptions
      <> showDefault
       )
   <*> option auto
-      ( long "fan_warn"
+      ( long "fan_low_warn"
      <> short 'f'
      <> metavar "NUMBER"
-     <> value defaultFanSpeedWarningThreshold
-     <> help "Warning fan speed threshold in RPMs"
+     <> value defaultFanSpeedLowWarningThreshold
+     <> help "Warning low fan speed threshold in RPMs"
      <> showDefault
       )
   <*> option auto
-      ( long "han_crit"
+      ( long "fan_low_crit"
      <> short 'F'
      <> metavar "NUMBER"
-     <> value defaultFanSpeedCriticalThreshold
-     <> help "Critical fan speed threshold in RPMs"
+     <> value defaultFanSpeedLowCriticalThreshold
+     <> help "Critical low fan speed threshold in RPMs"
      <> showDefault
       )
-
+   <*> option auto
+      ( long "fan_high_warn"
+     <> short 'n'
+     <> metavar "NUMBER"
+     <> value defaultFanSpeedHighWarningThreshold
+     <> help "Warning low fan speed threshold in RPMs"
+     <> showDefault
+      )
+   <*> option auto
+      ( long "fan_high_crit"
+     <> short 'N'
+     <> metavar "NUMBER"
+     <> value defaultFanSpeedHighCriticalThreshold
+     <> help "Critical low fan speed threshold in RPMs"
+     <> showDefault
+      )
 
 anyTempsAreZero :: TextRationalPairs -> Bool
 anyTempsAreZero = any ((== 0) . snd)
@@ -130,14 +151,14 @@ maximumHashRateThreshold = 10000
 minimumHashRateThreshold :: Double
 minimumHashRateThreshold = 0
 maximumFanSpeedThreshold :: Double
-maximumFanSpeedThreshold = 10000
+maximumFanSpeedThreshold = 20000
 minimumFanSpeedThreshold :: Double
 minimumFanSpeedThreshold = 0
 
-data Thresholds = Thresholds Rational Rational Rational Rational Rational Rational
+data Thresholds = Thresholds Rational Rational Rational Rational Rational Rational Rational Rational
 
 checkStats :: Stats -> Thresholds -> NagiosPlugin ()
-checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc fw fc) = do
+checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw fhc) = do
   let maxTemp = maximum $ snd <$> temps
   let minHashRates = minimum $ snd <$> hashrates
   addResult OK
@@ -165,12 +186,20 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc fw fc) = do
   then addResult Warning $ "Hashrate exceeds warning threshold of " <> (T.pack . show) (toDouble hw) <> " Ghs"
   else return ()
 
-  if anyBelowThreshold fanspeeds fc
-  then addResult Critical $ "Fan speed exceeds critical threshold of " <> (T.pack . show) (toDouble fc) <> " RPM"
+  if anyBelowThreshold fanspeeds flc
+  then addResult Critical $ "Fan speed exceeds critical threshold of " <> (T.pack . show) (toDouble flc) <> " RPM"
   else return ()
 
-  if anyBelowThreshold fanspeeds fw
-  then addResult Warning $ "Fan speed exceeds warning threshold of " <> (T.pack . show) (toDouble fw) <> " RPM"
+  if anyBelowThreshold fanspeeds flw
+  then addResult Warning $ "Fan speed exceeds warning threshold of " <> (T.pack . show) (toDouble flw) <> " RPM"
+  else return ()
+
+  if anyAboveThreshold fanspeeds fhc
+  then addResult Critical $ "Fan speed exceeds critical threshold of " <> (T.pack . show) (toDouble fhc) <> " RPM"
+  else return ()
+
+  if anyAboveThreshold fanspeeds fhw
+  then addResult Warning $ "Fan speed exceeds warning threshold of " <> (T.pack . show) (toDouble fhw) <> " RPM"
   else return ()
 
   -- Go through each measurement and it to performance data output
@@ -182,7 +211,9 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc fw fc) = do
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
     addTempData s t = addPerfData s t minimumTempThreshold maximumTempThreshold tw tc
     addHashData s t = addPerfData s t minimumHashRateThreshold maximumHashRateThreshold hw hc
-    addFanData s t = addPerfData s t minimumFanSpeedThreshold maximumFanSpeedThreshold fw fc
+    addFanData s t = addPerfDatum s (RealValue $ fromRational t) NullUnit
+                               (Just $ RealValue minimumFanSpeedThreshold)
+                               (Just $ RealValue maximumFanSpeedThreshold) Nothing Nothing
 
     addPerfData s t mint maxt w c = addPerfDatum s (RealValue $ fromRational t) NullUnit
                               (Just $ RealValue mint) (Just $ RealValue maxt)
@@ -193,7 +224,7 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc fw fc) = do
     toDouble = fromRational
 
 execCheck :: CliOptions -> IO ()
-execCheck (CliOptions h p tw tc hw hc fw fc) = do
+execCheck (CliOptions h p tw tc hw hc flw flc fhw fhc) = do
   r <- connect h p $ \(connectionSocket, _) -> do
     send connectionSocket $ toStrict . encode $ QueryApi "stats" "0"
     mconcat <$> unfoldWhileM ((/=) Nothing) (recv connectionSocket 4096)
@@ -213,7 +244,8 @@ execCheck (CliOptions h p tw tc hw hc fw fc) = do
           Left s -> putStrLn s
           Right stats -> runNagiosPlugin $ checkStats stats $ Thresholds (appRat tw) (appRat tc)
                                                     (appRat hw) (appRat hc)
-                                                    (appRat fw) (appRat fc)
+                                                    (appRat flw) (appRat flc)
+                                                    (appRat fhw) (appRat fhc)
   where
     appRat v = approxRational v 0.0001
 

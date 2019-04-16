@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.3.0.0
+
+- Add upper threshold for fan speeds
+
 ## 0.2.1.0
 
 - Parse hash rate empty string as zero
