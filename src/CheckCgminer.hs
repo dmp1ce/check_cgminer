@@ -123,7 +123,7 @@ cliOptions = CliOptions
      <> short 'n'
      <> metavar "NUMBER"
      <> value defaultFanSpeedHighWarningThreshold
-     <> help "Warning low fan speed threshold in RPMs"
+     <> help "Warning high fan speed threshold in RPMs"
      <> showDefault
       )
    <*> option auto
@@ -131,7 +131,7 @@ cliOptions = CliOptions
      <> short 'N'
      <> metavar "NUMBER"
      <> value defaultFanSpeedHighCriticalThreshold
-     <> help "Critical low fan speed threshold in RPMs"
+     <> help "Critical high fan speed threshold in RPMs"
      <> showDefault
       )
 
