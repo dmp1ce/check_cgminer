@@ -6,7 +6,7 @@ import Data.Aeson ( ToJSON, FromJSON, toEncoding, genericToEncoding
                   , defaultOptions
                   , decode
                   , parseJSON, withObject, (.:),  Value(Number, Object, String), Array)
-import Data.Aeson.Types (parseEither, Parser)
+import Data.Aeson.Types (parseEither)
 import Data.ByteString.Lazy (ByteString, stripSuffix)
 import Data.Vector ( (!?) )
 import qualified Data.Text as T
@@ -54,41 +54,44 @@ getStats reply = flip parseEither reply $ \r -> do
   --fail $ show $ Data.Vector.length statsArray
   let Just s = stats r
       Just (Object rawStats) = s !? 1
-  (Number temp6) <- rawStats .: "temp6"
-  (Number temp7) <- rawStats .: "temp7"
-  (Number temp8) <- rawStats .: "temp8"
-  (Number temp2_6) <- rawStats .: "temp2_6"
-  (Number temp2_7) <- rawStats .: "temp2_7"
-  (Number temp2_8) <- rawStats .: "temp2_8"
-  (Number fan5) <- rawStats .: "fan5"
-  (Number fan6) <- rawStats .: "fan6"
-  (String chain_rate6_text) <- rawStats .: "chain_rate6"
-  (String chain_rate7_text) <- rawStats .: "chain_rate7"
-  (String chain_rate8_text) <- rawStats .: "chain_rate8"
+  temp6 <- expectRational <$> rawStats .: "temp6"
+  temp7 <- expectRational <$> rawStats .: "temp7"
+  temp8 <- expectRational <$> rawStats .: "temp8"
+  temp2_6 <- expectRational <$> rawStats .: "temp2_6"
+  temp2_7 <- expectRational <$> rawStats .: "temp2_7"
+  temp2_8 <- expectRational <$> rawStats .: "temp2_8"
+  fan5 <- expectRational <$> rawStats .: "fan5"
+  fan6 <- expectRational <$> rawStats .: "fan6"
+  chain_rate6 <- expectRational <$> rawStats .: "chain_rate6"
+  chain_rate7 <- expectRational <$> rawStats .: "chain_rate7"
+  chain_rate8 <- expectRational <$> rawStats .: "chain_rate8"
 
-  chain_rate6 <- textToRational chain_rate6_text
-  chain_rate7 <- textToRational chain_rate7_text
-  chain_rate8 <- textToRational chain_rate8_text
-
-  return $ (Stats [ ("temp6", toRational temp6)
-            , ("temp2_6", toRational temp2_6)
-            , ("temp7", toRational temp7)
-            , ("temp2_7", toRational temp2_7)
-            , ("temp8", toRational temp8)
-            , ("temp2_8", toRational temp2_8)
+  return $ (Stats [ ("temp6", temp6)
+            , ("temp2_6", temp2_6)
+            , ("temp7", temp7)
+            , ("temp2_7", temp2_7)
+            , ("temp8", temp8)
+            , ("temp2_8", temp2_8)
             ]
             [ ("chain_rate6", chain_rate6)
             , ("chain_rate7", chain_rate7)
             , ("chain_rate8", chain_rate8)
             ]
-            [ ("fan5", toRational fan5)
-            , ("fan6", toRational fan6)
+            [ ("fan5", fan5)
+            , ("fan6", fan6)
             ]
            )
   where
-    textToRational :: Text -> Parser Rational
+    -- We really want a rational from the data so make it happen here.
+    expectRational :: Value -> Rational
+    expectRational (Number n) = toRational n
+    expectRational (String s) = textToRational s
+    expectRational e = error $ "Could not parse " ++ show e
+    textToRational :: Text -> Rational
     textToRational t =
       let e = (readEither $ T.unpack t) :: Either String Scientific
       in case e of
-        Left _ -> fail $ "Failed to parse number: " ++ T.unpack t
-        Right r -> return $ toRational r
+        Left s -> if t == ""
+                  then 0
+                  else error $ s ++ "\nFailed to parse number: '" ++ T.unpack t ++ "'"
+        Right r -> toRational r

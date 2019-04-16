@@ -203,9 +203,15 @@ execCheck (CliOptions h p tw tc hw hc fw fc) = do
                                           <> ((T.pack . show) h) <> ":" <> ((T.pack . show) p))
   else do
     let Just r' = fromStrict <$> r
-    let Just (Right stats) = getStats <$> decodeReply r'
+    let mestats = getStats <$> decodeReply r'
 
-    runNagiosPlugin $ checkStats stats $ Thresholds (appRat tw) (appRat tc)
+    case mestats of
+      Nothing -> do
+        putStrLn "Failed to decode reply from cgminer."
+      Just estats ->
+        case estats of
+          Left s -> putStrLn s
+          Right stats -> runNagiosPlugin $ checkStats stats $ Thresholds (appRat tw) (appRat tc)
                                                     (appRat hw) (appRat hc)
                                                     (appRat fw) (appRat fc)
   where
