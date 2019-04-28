@@ -170,37 +170,17 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw
   then addResult Warning "At least one temperature at 0 C"
   else return ()
 
-  if anyAboveThreshold temps tc
-  then addResult Critical $ "Temperature exceeds critical threshold of " <> (T.pack . show) (toDouble tc) <> " C"
-  else return ()
+  addResultIf anyAboveThreshold temps tc Critical "Temperature above critical threshold of " "C"
+  addResultIf anyAboveThreshold temps tw Warning "Temperature above warning threshold of " "C"
 
-  if anyAboveThreshold temps tw
-  then addResult Warning $ "Temperature exceeds warning threshold of " <> (T.pack . show) (toDouble tw) <> " C"
-  else return ()
+  addResultIf anyBelowThreshold hashrates hc Critical "Hashrates below critical threshold of " "Ghs"
+  addResultIf anyBelowThreshold hashrates hw Warning "Hashrates below warning threshold of " "Ghs"
 
-  if anyBelowThreshold hashrates hc
-  then addResult Critical $ "Hashrate exceeds critical threshold of " <> (T.pack . show) (toDouble hc) <> " Ghs"
-  else return ()
+  addResultIf anyBelowThreshold fanspeeds flc Critical "Fan speed below critical threshold of " "RPM"
+  addResultIf anyBelowThreshold fanspeeds flw Warning "Fan speed below warning threshold of " "RPM"
 
-  if anyBelowThreshold hashrates hw
-  then addResult Warning $ "Hashrate exceeds warning threshold of " <> (T.pack . show) (toDouble hw) <> " Ghs"
-  else return ()
-
-  if anyBelowThreshold fanspeeds flc
-  then addResult Critical $ "Fan speed exceeds critical threshold of " <> (T.pack . show) (toDouble flc) <> " RPM"
-  else return ()
-
-  if anyBelowThreshold fanspeeds flw
-  then addResult Warning $ "Fan speed exceeds warning threshold of " <> (T.pack . show) (toDouble flw) <> " RPM"
-  else return ()
-
-  if anyAboveThreshold fanspeeds fhc
-  then addResult Critical $ "Fan speed exceeds critical threshold of " <> (T.pack . show) (toDouble fhc) <> " RPM"
-  else return ()
-
-  if anyAboveThreshold fanspeeds fhw
-  then addResult Warning $ "Fan speed exceeds warning threshold of " <> (T.pack . show) (toDouble fhw) <> " RPM"
-  else return ()
+  addResultIf anyAboveThreshold fanspeeds fhc Critical "Fan speed above critical threshold of " "RPM"
+  addResultIf anyAboveThreshold fanspeeds fhw Warning "Fan speed above warning threshold of " "RPM"
 
   -- Go through each measurement and it to performance data output
   mapMPerfData addTempData temps
@@ -222,6 +202,11 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw
 
     toDouble :: Rational -> Double
     toDouble = fromRational
+    addResultIf check values threshold resultType msg unit =
+      if check values threshold
+      then addResult resultType $ msg <> (T.pack . show) (toDouble threshold) <> " " <> unit
+      else return ()
+
 
 execCheck :: CliOptions -> IO ()
 execCheck (CliOptions h p tw tc hw hc flw flc fhw fhc) = do
@@ -254,7 +239,7 @@ mainExecParser = execParser opts >>= execCheck
   where
     opts = info (helper <*> versionOption <*> cliOptions)
       ( fullDesc
-     <> progDesc "Return Nagios formatted string based cgminer API returned values"
+     <> progDesc "Return Nagios formatted string based on cgminer API returned values"
      <> header "check_cgminer - Nagios monitoring plugin for cgminer API" )
     versionOption = infoOption ("check_cgminer " ++ showVersion version)
       ( long "version" <> short 'v' <> help "Show version information" )

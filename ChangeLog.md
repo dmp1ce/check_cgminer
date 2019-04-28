@@ -3,6 +3,7 @@
 ## 0.3.1.0
 
 - Add support for S17 miners
+- Improve string wording
 
 ## 0.3.0.0
 
