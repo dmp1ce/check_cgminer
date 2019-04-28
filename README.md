@@ -1,5 +1,7 @@
 # check_cgminer
 
+[![CircleCI](https://circleci.com/gh/dmp1ce/check_cgminer.svg?style=svg)](https://circleci.com/gh/dmp1ce/check_cgminer)
+
 Monitoring (Nagios) plugin for checking s9 miner temperatures from the cgminer API.
 
 ## Help
