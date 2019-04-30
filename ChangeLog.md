@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.3.3.0
+
+- Add support for S15 miners
+
 ## 0.3.2.0
 
 - Add support for more S17 miner types

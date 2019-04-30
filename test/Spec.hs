@@ -42,6 +42,32 @@ json = testGroup "json tests"
                            [ ("fan5",5040)
                            , ("fan6",3600)
                            ])
+  , testCase "Successfully decode example reply (s15)" $
+    ((decodeReply exampleReplyS15) /= Nothing) @? "exampleReply could not be decoded"
+  , testCase "Can get stats (stock s15)" $
+      let Just x = decodeReply exampleReplyS15
+      in (getStats x) @?= (Right $ Stats
+                           [ ("temp1"::T.Text, 60::Rational)
+                           , ("temp2"::T.Text, 65)
+                           , ("temp3", 66)
+                           , ("temp4", 59)
+                           , ("temp2_1", 55)
+                           , ("temp2_2", 58)
+                           , ("temp2_3", 58)
+                           , ("temp2_4", 55)
+                           , ("temp3_1", 75)
+                           , ("temp3_2", 80)
+                           , ("temp3_3", 80)
+                           , ("temp3_4", 74)
+                           ]
+                           [ ("chain_rate1",7278.55)
+                           , ("chain_rate2",6948.71)
+                           , ("chain_rate3",6860.75)
+                           , ("chain_rate4",7366.51)
+                           ]
+                           [ ("fan1",4080)
+                           , ("fan2",4200)
+                           ])
   , testCase "Successfully decode example reply (s17)" $
     ((decodeReply exampleReplyS17) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (stock s17)" $
