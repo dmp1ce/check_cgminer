@@ -226,7 +226,7 @@ execCheck (CliOptions h p tw tc hw hc flw flc fhw fhc) = do
         putStrLn "Failed to decode reply from cgminer."
       Just estats ->
         case estats of
-          Left s -> putStrLn s
+          Left s -> runNagiosPlugin $ addResult Unknown $ T.pack s
           Right stats -> runNagiosPlugin $ checkStats stats $ Thresholds (appRat tw) (appRat tc)
                                                     (appRat hw) (appRat hc)
                                                     (appRat flw) (appRat flc)

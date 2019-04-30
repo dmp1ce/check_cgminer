@@ -59,7 +59,28 @@ getStats reply = flip parseEither reply $ \r -> do
   mMinerType <- infoStats .:? "Type"
 
   case mMinerType of
-    Just (String "Antminer S17 Pro") -> do
+    Just (String "Antminer S17 Pro") -> parseS17Stats rawStats
+    Just (String "Antminer S17") -> parseS17Stats rawStats
+    Just (String "braiins-am1-s9") -> parseS9Stats rawStats
+    Just (String s') -> fail $ "Unexpected miner type: '" ++ T.unpack s' ++ "'"
+    Just s' -> fail $ "Unexpected miner type: " ++ show s'
+    -- Matches S9 miner case
+    Nothing -> parseS9Stats rawStats
+  where
+    -- We really want a rational from the data so make it happen here.
+    expectRational :: Value -> Rational
+    expectRational (Number n) = toRational n
+    expectRational (String s) = textToRational s
+    expectRational e = error $ "Could not parse " ++ show e
+    textToRational :: Text -> Rational
+    textToRational t =
+      let e = (readEither $ T.unpack t) :: Either String Scientific
+      in case e of
+        Left s -> if t == ""
+                  then 0
+                  else error $ s ++ "\nFailed to parse number: '" ++ T.unpack t ++ "'"
+        Right r -> toRational r
+    parseS17Stats rawStats = do
       temp1 <- expectRational <$> rawStats .: "temp1"
       temp2 <- expectRational <$> rawStats .: "temp2"
       temp3 <- expectRational <$> rawStats .: "temp3"
@@ -97,24 +118,6 @@ getStats reply = flip parseEither reply $ \r -> do
                 , ("fan4", fan4)
                 ]
                )
-    Just (String "braiins-am1-s9") -> parseS9Stats rawStats
-    Just s' -> fail $ "Unexpected miner type: " ++ show s'
-    -- Matches S9 miner case
-    Nothing -> parseS9Stats rawStats
-  where
-    -- We really want a rational from the data so make it happen here.
-    expectRational :: Value -> Rational
-    expectRational (Number n) = toRational n
-    expectRational (String s) = textToRational s
-    expectRational e = error $ "Could not parse " ++ show e
-    textToRational :: Text -> Rational
-    textToRational t =
-      let e = (readEither $ T.unpack t) :: Either String Scientific
-      in case e of
-        Left s -> if t == ""
-                  then 0
-                  else error $ s ++ "\nFailed to parse number: '" ++ T.unpack t ++ "'"
-        Right r -> toRational r
     parseS9Stats rawStats = do
       temp6 <- expectRational <$> rawStats .: "temp6"
       temp7 <- expectRational <$> rawStats .: "temp7"
