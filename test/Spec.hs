@@ -5,7 +5,7 @@ import Test.Tasty.HUnit ( testCase, (@?=), (@?) )
 import Data.ByteString.Lazy (ByteString)
 import Data.Aeson (encode)
 
-import CgminerApi (QueryApi (QueryApi), decodeReply, getStats, Stats (Stats))
+import CgminerApi (QueryApi (QueryApi), decodeReply, getStats, getSummary, Stats (Stats))
 import CheckCgminer (anyTempsAreZero, anyAboveThreshold, anyBelowThreshold)
 import qualified Data.Text as T
 
@@ -67,6 +67,16 @@ json = testGroup "json tests"
                            ]
                            [ ("fan1",4080)
                            , ("fan2",4200)
+                           ])
+  , testCase "Successfully decode example reply (Whatsminer)" $
+    ((decodeReply exampleReplyWhatsminer) /= Nothing) @? "exampleReply could not be decoded"
+  , testCase "Can get stats (whatsminer)" $
+      let Just x = decodeReply exampleReplyWhatsminer
+      in (getSummary x) @?= (Right $ Stats
+                           [ ("Temperature"::T.Text, 75.00::Rational)]
+                           [ ("MHS 5s",35523530.10)]
+                           [ ("Fan Speed In",6360)
+                           , ("Fan Speed Out",6390)
                            ])
   , testCase "Successfully decode example reply (s17)" $
     ((decodeReply exampleReplyS17) /= Nothing) @? "exampleReply could not be decoded"

@@ -1,6 +1,11 @@
 module ReplyExamples where
 import Data.ByteString.Lazy (ByteString)
 
+-- Whatsminer summary example from IP 10.0.0.13
+
+exampleReplyWhatsminer :: ByteString
+exampleReplyWhatsminer = "{\"STATUS\":[{\"STATUS\":\"S\",\"When\":1093410,\"Code\":11,\"Msg\":\"Summary\",\"Description\":\"cgminer 4.9.2\"}],\"SUMMARY\":[{\"Elapsed\":1092753,\"MHS av\":33964601.57,\"MHS 5s\":35523530.10,\"MHS 1m\":34178901.11,\"MHS 5m\":34227021.20,\"MHS 15m\":34123313.93,\"Found Blocks\":0,\"Getworks\":39291,\"Accepted\":374583,\"Rejected\":1269,\"Hardware Errors\":1046,\"Utility\":20.57,\"Discarded\":7147635,\"Stale\":0,\"Get Failures\":0,\"Local Work\":508168332,\"Remote Failures\":0,\"Network Blocks\":1911,\"Total MH\":37114922488914.0000,\"Work Utility\":474480.38,\"Difficulty Accepted\":8605348258.00000000,\"Difficulty Rejected\":29111291.00000000,\"Difficulty Stale\":0.00000000,\"Best Share\":7450909747,\"Temperature\":75.00,\"freq_max\":0,\"freq_min\":0,\"freq_avg\":539,\"Fan Speed In\":6360,\"Fan Speed Out\":6390,\"fan_stop_count\":0,\"fan_stop_turnoff_threshold\":5,\"fan_stop_turnoff_times\":0,\"Fan set_get_err_turnoff_threshold\":15,\"fan[0] set_get_err_turnoff_count\":0,\"fan[1] set_get_err_turnoff_count\":0,\"Voltage\":1170,\"Device Hardware%\":0.0000,\"Device Rejected%\":0.3369,\"Pool Rejected%\":0.3372,\"Pool Stale%\":0.0000,\"Last getwork\":1093410,\"Uptime\":1093411,\"Chip Data\":\"T16Z214-1835BIN1\",\"Power Fanspeed\":11010,\"Error Code Count\":0}],\"id\":1}"
+
 -- Stock S15 stats example from IP 10.0.0.11
 
 exampleReplyS15 :: ByteString

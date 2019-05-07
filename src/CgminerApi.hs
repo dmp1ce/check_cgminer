@@ -23,13 +23,15 @@ instance ToJSON QueryApi where
 instance FromJSON QueryApi
 
 data ReplyApi = ReplyApi
-  { status :: Maybe Value
-  , stats :: Maybe Array
+  { status  :: Maybe Value
+  , stats   :: Maybe Array
+  , summary :: Maybe Array
   } deriving (Generic, Show, Eq)
 instance FromJSON ReplyApi where
   parseJSON = withObject "ReplyApi" $ \v -> ReplyApi
     <$> v .: "STATUS"
-    <*> v .: "STATS"
+    <*> (v .:? "STATS")
+    <*> (v .:? "SUMMARY")
 
 data Stats = Stats { tempuratures :: TextRationalPairs
                    , hashrates :: TextRationalPairs
@@ -48,7 +50,19 @@ decodeReply bs =
       decodeReply' Nothing = decode bs
   in decodeReply' bss
 
--- | Parse temperatures from reply
+-- | Parse stats from Summary section of reply
+getSummary :: ReplyApi -> Either String Stats
+getSummary reply = flip parseEither reply $ \r -> do
+  let Just s = summary r
+      --Just (Object infoStats) = s !? 0
+      Just (Object rawStats) = s !? 0
+
+  temps <- parseTextListToRational ["Temperature"] rawStats
+  fans <- parseTextListToRational ["Fan Speed In","Fan Speed Out"] rawStats
+  hrates <- parseTextListToRational ["MHS 5s"] rawStats
+  return $ (Stats temps hrates fans)
+
+-- | Parse `Stats` from STATS section of reply
 getStats :: ReplyApi -> Either String Stats
 getStats reply = flip parseEither reply $ \r -> do
   --let Just stats' = stats obj
@@ -69,26 +83,7 @@ getStats reply = flip parseEither reply $ \r -> do
     -- Matches S9 miner case
     Nothing -> parseS9Stats rawStats
   where
-    -- We really want a rational from the data so make it happen here.
-    expectRational :: Value -> Rational
-    expectRational (Number n) = toRational n
-    expectRational (String s) = textToRational s
-    expectRational e = error $ "Could not parse " ++ show e
-    textToRational :: Text -> Rational
-    textToRational t =
-      let e = (readEither $ T.unpack t) :: Either String Scientific
-      in case e of
-        Left s -> if t == ""
-                  then 0
-                  else error $ s ++ "\nFailed to parse number: '" ++ T.unpack t ++ "'"
-        Right r -> toRational r
 
-    -- From a list of keys get the expected rational
-    parseTextListToRational :: [Text] -> Object -> Parser TextRationalPairs
-    parseTextListToRational ts s = mapM (\t -> do
-                                       x <- expectRational <$> s .: t
-                                       return (t, x)
-                                       ) ts
 
     parseS15Stats rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3","temp4"
@@ -109,3 +104,24 @@ getStats reply = flip parseEither reply $ \r -> do
       fans <- parseTextListToRational ["fan5","fan6"] rawStats
       hrates <- parseTextListToRational ["chain_rate6","chain_rate7","chain_rate8"] rawStats
       return $ (Stats temps hrates fans)
+
+-- We really want a rational from the data so make it happen here.
+expectRational :: Value -> Rational
+expectRational (Number n) = toRational n
+expectRational (String s) = textToRational s
+expectRational e = error $ "Could not parse " ++ show e
+textToRational :: Text -> Rational
+textToRational t =
+  let e = (readEither $ T.unpack t) :: Either String Scientific
+  in case e of
+    Left s -> if t == ""
+              then 0
+              else error $ s ++ "\nFailed to parse number: '" ++ T.unpack t ++ "'"
+    Right r -> toRational r
+
+-- From a list of keys get the expected rational
+parseTextListToRational :: [Text] -> Object -> Parser TextRationalPairs
+parseTextListToRational ts s = mapM (\t -> do
+                                   x <- expectRational <$> s .: t
+                                   return (t, x)
+                                   ) ts

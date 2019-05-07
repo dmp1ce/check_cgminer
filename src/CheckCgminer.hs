@@ -13,14 +13,17 @@ import Options.Applicative
   , value, help, str, auto, showDefault, infoOption)
 import Network.Simple.TCP (connect, send, recv)
 import Data.Aeson (encode)
-import Data.ByteString.Lazy (toStrict, fromStrict)
 import Control.Monad.Loops (unfoldWhileM)
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import Data.Ratio (approxRational)
 import Paths_check_cgminer (version)
 import Data.Version (showVersion)
+import Data.Either (lefts)
+import Numeric (showFFloat)
 
-import CgminerApi ( QueryApi (QueryApi), getStats, decodeReply, Stats (Stats), TextRationalPairs)
+import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats), TextRationalPairs, ReplyApi)
 
 data CliOptions = CliOptions
   { host :: String
@@ -29,6 +32,7 @@ data CliOptions = CliOptions
   , temp_error :: Double
   , hashrate_warning :: Double
   , hashrate_error :: Double
+  , hash_unit :: String
   , fanspeed_low_warning :: Double
   , fanspeed_low_error :: Double
   , fanspeed_high_warning :: Double
@@ -43,6 +47,8 @@ defaultHashRateWarningThreshold :: Double
 defaultHashRateWarningThreshold = 4000
 defaultHashRateCriticalThreshold :: Double
 defaultHashRateCriticalThreshold = 3000
+defaultHashUnit :: String
+defaultHashUnit = "Ghs"
 defaultFanSpeedLowWarningThreshold :: Double
 defaultFanSpeedLowWarningThreshold = 999
 defaultFanSpeedLowCriticalThreshold :: Double
@@ -91,7 +97,7 @@ cliOptions = CliOptions
      <> short 'r'
      <> metavar "NUMBER"
      <> value defaultHashRateWarningThreshold
-     <> help "Warning hash rate threshold in Gh/s"
+     <> help "Warning hash rate threshold"
      <> showDefault
       )
   <*> option auto
@@ -99,7 +105,14 @@ cliOptions = CliOptions
      <> short 'R'
      <> metavar "NUMBER"
      <> value defaultHashRateCriticalThreshold
-     <> help "Critical hash rate threshold in Gh/s"
+     <> help "Critical hash rate threshold"
+     <> showDefault
+      )
+  <*> option str
+      ( long "hashunit"
+     <> metavar "STRING"
+     <> value defaultHashUnit
+     <> help "Hashing unit of measure"
      <> showDefault
       )
   <*> option auto
@@ -157,13 +170,15 @@ minimumFanSpeedThreshold = 0
 
 data Thresholds = Thresholds Rational Rational Rational Rational Rational Rational Rational Rational
 
-checkStats :: Stats -> Thresholds -> NagiosPlugin ()
-checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw fhc) = do
+checkStats :: Stats -> Thresholds
+           -> String -- | Hashing unit
+           -> NagiosPlugin ()
+checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw fhc) hu = do
   let maxTemp = maximum $ snd <$> temps
   let minHashRates = minimum $ snd <$> hashrates
   addResult OK
      $ "Max temp: " <> (T.pack . show) (toDouble maxTemp) <> " C, "
-    <> "Min hashrate: " <> (T.pack . show) (toDouble minHashRates) <> " Ghs, "
+    <> "Min hashrate: " <> T.pack (showFFloat Nothing (toDouble minHashRates) " " ++ hu ++ ", ")
     <> "Min fanspeed: " <> (T.pack . show) (toDouble $ minimum $ snd <$> fanspeeds) <> " RPM"
 
   if anyTempsAreZero temps
@@ -173,8 +188,8 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw
   addResultIf anyAboveThreshold temps tc Critical "Temperature above critical threshold of " "C"
   addResultIf anyAboveThreshold temps tw Warning "Temperature above warning threshold of " "C"
 
-  addResultIf anyBelowThreshold hashrates hc Critical "Hashrates below critical threshold of " "Ghs"
-  addResultIf anyBelowThreshold hashrates hw Warning "Hashrates below warning threshold of " "Ghs"
+  addResultIf anyBelowThreshold hashrates hc Critical "Hashrates below critical threshold of " $ T.pack hu
+  addResultIf anyBelowThreshold hashrates hw Warning "Hashrates below warning threshold of " $ T.pack hu
 
   addResultIf anyBelowThreshold fanspeeds flc Critical "Fan speed below critical threshold of " "RPM"
   addResultIf anyBelowThreshold fanspeeds flw Warning "Fan speed below warning threshold of " "RPM"
@@ -208,29 +223,61 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw
       else return ()
 
 
-execCheck :: CliOptions -> IO ()
-execCheck (CliOptions h p tw tc hw hc flw flc fhw fhc) = do
-  r <- connect h p $ \(connectionSocket, _) -> do
-    send connectionSocket $ toStrict . encode $ QueryApi "stats" "0"
-    mconcat <$> unfoldWhileM ((/=) Nothing) (recv connectionSocket 4096)
+-- | Try to parse stats from miner. Return error `T.Text` if for failure.
+tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _) = do
+  r <- sendCGMinerCommand h p c
+
+  -- Uncomment for getting the raw reply from a miner for testing
+  --print r
+  --_ <- error ""
 
   if r == Nothing
-  then runNagiosPlugin $ addResult Unknown ( "Could not parse reply from "
-                                          <> ((T.pack . show) h) <> ":" <> ((T.pack . show) p))
+  then return $ Left $ "Could not parse reply from " <> ((T.pack . show) h) <> ":" <> ((T.pack . show) p)
   else do
-    let Just r' = fromStrict <$> r
-    let mestats = getStats <$> decodeReply r'
+    let Just r' = BL.fromStrict <$> r
+    let mec = f <$> decodeReply r'
 
-    case mestats of
-      Nothing -> do
-        putStrLn "Failed to decode reply from cgminer."
-      Just estats ->
-        case estats of
-          Left s -> runNagiosPlugin $ addResult Unknown $ T.pack s
-          Right stats -> runNagiosPlugin $ checkStats stats $ Thresholds (appRat tw) (appRat tc)
+    case mec of
+      Nothing -> return $ Left "Failed to decode reply from cgminer."
+      Just ec ->
+        case ec of
+          Left s -> return $ Left $ T.pack s
+          Right stats -> return $ Right stats
+
+
+tryStats :: CliOptions -> IO (Either T.Text Stats)
+tryStats = tryCommand "stats" getStats
+
+trySummary :: CliOptions -> IO (Either T.Text Stats)
+trySummary = tryCommand "summary" getSummary
+
+execCheck :: CliOptions -> IO ()
+execCheck opts@(CliOptions _ _ tw tc hw hc hu flw flc fhw fhc) = do
+
+  -- Try to get "stats" command first
+  eStats <- tryStats opts
+
+  case eStats of
+    Left _ -> return ()
+    Right stats -> runNagiosPlugin $ checkStats stats (Thresholds (appRat tw) (appRat tc)
                                                     (appRat hw) (appRat hc)
                                                     (appRat flw) (appRat flc)
-                                                    (appRat fhw) (appRat fhc)
+                                                    (appRat fhw) (appRat fhc)) hu
+
+  -- Something went wrong with stats command so try "summary" next
+  eSummary <- trySummary opts
+
+  case eSummary of
+    Left _ -> return ()
+    Right stats -> runNagiosPlugin $ checkStats stats (Thresholds (appRat tw) (appRat tc)
+                                                    (appRat hw) (appRat hc)
+                                                    (appRat flw) (appRat flc)
+                                                    (appRat fhw) (appRat fhc)) hu
+
+  runNagiosPlugin $ addResult Unknown $ T.concat $ lefts [ eStats, Left ", "
+                                                         , eSummary
+                                                         ]
   where
     appRat v = approxRational v 0.0001
 
@@ -243,3 +290,9 @@ mainExecParser = execParser opts >>= execCheck
      <> header "check_cgminer - Nagios monitoring plugin for cgminer API" )
     versionOption = infoOption ("check_cgminer " ++ showVersion version)
       ( long "version" <> short 'v' <> help "Show version information" )
+
+
+sendCGMinerCommand :: String -> String -> T.Text -> IO (Maybe BS.ByteString)
+sendCGMinerCommand h p s = connect h p $ \(connectionSocket, _) -> do
+    send connectionSocket $ BL.toStrict . encode $ QueryApi s "0"
+    mconcat <$> unfoldWhileM ((/=) Nothing) (recv connectionSocket 4096)
