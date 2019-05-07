@@ -2,7 +2,13 @@
 
 [![CircleCI](https://circleci.com/gh/dmp1ce/check_cgminer.svg?style=svg)](https://circleci.com/gh/dmp1ce/check_cgminer)
 
-Monitoring (Nagios) plugin for checking s9 miner temperatures from the cgminer API.
+Monitoring (Nagios) plugin for checking cgminer miner devices statistics from the cgminer API.
+
+Tested devices:
+
+- S9
+- S17
+- Whatsminer
 
 ## Help
 
