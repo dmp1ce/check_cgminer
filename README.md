@@ -7,6 +7,7 @@ Monitoring (Nagios) plugin for checking cgminer miner devices statistics from th
 Tested devices:
 
 - S9
+- S15
 - S17
 - Whatsminer
 
