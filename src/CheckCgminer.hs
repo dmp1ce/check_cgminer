@@ -213,7 +213,8 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw
     addPerfData s t mint maxt w c = addPerfDatum s (RealValue $ fromRational t) NullUnit
                               (Just $ RealValue mint) (Just $ RealValue maxt)
                               (Just $ RealValue $ fromRational w) (Just $ RealValue $ fromRational c)
-    mapMPerfData f l = mapM_ (\x -> f (fst x) (snd x)) l
+    mapMPerfData f l = mapM_ (\x -> f ((removeSpaces . fst) x) (snd x)) l
+    removeSpaces = T.map (\x -> if x == ' ' then '_' else x)
 
     toDouble :: Rational -> Double
     toDouble = fromRational
