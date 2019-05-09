@@ -32,6 +32,7 @@ data CliOptions = CliOptions
   , temp_error :: Double
   , hashrate_warning :: Double
   , hashrate_error :: Double
+  , hashrate_maximum :: Double
   , hash_unit :: String
   , fanspeed_low_warning :: Double
   , fanspeed_low_error :: Double
@@ -108,6 +109,13 @@ cliOptions = CliOptions
      <> help "Critical hash rate threshold"
      <> showDefault
       )
+  <*> option auto
+      ( long "hash_maximum"
+     <> metavar "NUMBER"
+     <> value defaultMaximumHashRateThreshold
+     <> help "Maximum Hashrate (Used with performance data)"
+     <> showDefault
+      )
   <*> option str
       ( long "hashunit"
      <> metavar "STRING"
@@ -159,8 +167,8 @@ maximumTempThreshold :: Double
 maximumTempThreshold = 120
 minimumTempThreshold :: Double
 minimumTempThreshold = 20
-maximumHashRateThreshold :: Double
-maximumHashRateThreshold = 10000
+defaultMaximumHashRateThreshold :: Double
+defaultMaximumHashRateThreshold = 10000
 minimumHashRateThreshold :: Double
 minimumHashRateThreshold = 0
 maximumFanSpeedThreshold :: Double
@@ -168,12 +176,25 @@ maximumFanSpeedThreshold = 20000
 minimumFanSpeedThreshold :: Double
 minimumFanSpeedThreshold = 0
 
-data Thresholds = Thresholds Rational Rational Rational Rational Rational Rational Rational Rational
+data Thresholds = Thresholds TempThresholds HashThresholds FanThresholds
+data TempThresholds = TempThresholds HighWarning HighCritical
+data FanThresholds = FanThresholds LowWarning LowCritical HighWarning HighCritical
+data HashThresholds = HashThresholds HighWarning HighCritical Maximum
+newtype HighWarning = HighWarning Rational
+newtype HighCritical = HighCritical Rational
+newtype LowWarning = LowWarning Rational
+newtype LowCritical = LowCritical Rational
+newtype Maximum = Maximum Double
 
 checkStats :: Stats -> Thresholds
            -> String -- | Hashing unit
            -> NagiosPlugin ()
-checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw fhc) hu = do
+checkStats (Stats temps hashrates fanspeeds)
+           (Thresholds
+              (TempThresholds (HighWarning tw) (HighCritical tc))
+              (HashThresholds (HighWarning hw) (HighCritical hc) (Maximum hmax))
+              (FanThresholds (LowWarning flw) (LowCritical flc)
+              (HighWarning fhw) (HighCritical fhc))) hu = do
   let maxTemp = maximum $ snd <$> temps
   let minHashRates = minimum $ snd <$> hashrates
   addResult OK
@@ -205,7 +226,7 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw
   where
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
     addTempData s t = addPerfData s t minimumTempThreshold maximumTempThreshold tw tc
-    addHashData s t = addPerfData s t minimumHashRateThreshold maximumHashRateThreshold hw hc
+    addHashData s t = addPerfData s t minimumHashRateThreshold hmax hw hc
     addFanData s t = addPerfDatum s (RealValue $ fromRational t) NullUnit
                                (Just $ RealValue minimumFanSpeedThreshold)
                                (Just $ RealValue maximumFanSpeedThreshold) Nothing Nothing
@@ -226,7 +247,7 @@ checkStats (Stats temps hashrates fanspeeds) (Thresholds tw tc hw hc flw flc fhw
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
-tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _) = do
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _) = do
   r <- sendCGMinerCommand h p c
 
   -- Uncomment for getting the raw reply from a miner for testing
@@ -254,33 +275,31 @@ trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
 execCheck :: CliOptions -> IO ()
-execCheck opts@(CliOptions _ _ tw tc hw hc hu flw flc fhw fhc) = do
+execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc) = do
 
   -- Try to get "stats" command first
   eStats <- tryStats opts
 
   case eStats of
     Left _ -> return ()
-    Right stats -> runNagiosPlugin $ checkStats stats (Thresholds (appRat tw) (appRat tc)
-                                                    (appRat hw) (appRat hc)
-                                                    (appRat flw) (appRat flc)
-                                                    (appRat fhw) (appRat fhc)) hu
+    Right stats -> runNagiosPlugin $ checkStats stats thresholds hu
 
   -- Something went wrong with stats command so try "summary" next
   eSummary <- trySummary opts
 
   case eSummary of
     Left _ -> return ()
-    Right stats -> runNagiosPlugin $ checkStats stats (Thresholds (appRat tw) (appRat tc)
-                                                    (appRat hw) (appRat hc)
-                                                    (appRat flw) (appRat flc)
-                                                    (appRat fhw) (appRat fhc)) hu
+    Right stats -> runNagiosPlugin $ checkStats stats thresholds hu
 
   runNagiosPlugin $ addResult Unknown $ T.concat $ lefts [ eStats, Left ", "
                                                          , eSummary
                                                          ]
   where
     appRat v = approxRational v 0.0001
+    thresholds = (Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
+                 (HashThresholds (HighWarning (appRat hw)) (HighCritical (appRat hc)) (Maximum hmax))
+                 (FanThresholds (LowWarning (appRat flw)) (LowCritical (appRat flc))
+                                (HighWarning (appRat fhw)) (HighCritical ((appRat fhc)))))
 
 mainExecParser :: IO ()
 mainExecParser = execParser opts >>= execCheck
