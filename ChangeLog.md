@@ -1,5 +1,16 @@
 # Changelog for check_cgminer
 
+## 0.4.1.0
+
+- Add support for DR5 and Z9-mini devices
+- Add customize-able maximum hash value
+- Add customize-able hashunit string
+- Remove space characters from performance data strings
+
+## 0.4.0.0
+
+- Add support for Whatsminer devices
+
 ## 0.3.3.0
 
 - Add support for S15 miners

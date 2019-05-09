@@ -6,9 +6,11 @@ Monitoring (Nagios) plugin for checking cgminer miner devices statistics from th
 
 Tested devices:
 
+- DR5
 - S9
 - S15
 - S17
+- Z9-mini
 - Whatsminer
 
 ## Help
@@ -19,9 +21,10 @@ check_cgminer - Nagios monitoring plugin for cgminer API
 Usage: check_cgminer [-v|--version] [-H|--host HOST] [-P|--port PORT]
                      [-t|--temp_warn NUMBER] [-T|--temp_crit NUMBER]
                      [-r|--hash_warn NUMBER] [-R|--hash_crit NUMBER]
+                     [--hash_maximum NUMBER] [--hashunit STRING]
                      [-f|--fan_low_warn NUMBER] [-F|--fan_low_crit NUMBER]
                      [-n|--fan_high_warn NUMBER] [-N|--fan_high_crit NUMBER]
-  Return Nagios formatted string based cgminer API returned values
+  Return Nagios formatted string based on cgminer API returned values
 
 Available options:
   -h,--help                Show this help text
@@ -32,9 +35,11 @@ Available options:
                            Celsius (default: 90.0)
   -T,--temp_crit NUMBER    Critical temperature threshold in
                            Celsius (default: 100.0)
-  -r,--hash_warn NUMBER    Warning hash rate threshold in Gh/s (default: 4000.0)
-  -R,--hash_crit NUMBER    Critical hash rate threshold in
-                           Gh/s (default: 3000.0)
+  -r,--hash_warn NUMBER    Warning hash rate threshold (default: 4000.0)
+  -R,--hash_crit NUMBER    Critical hash rate threshold (default: 3000.0)
+  --hash_maximum NUMBER    Maximum Hashrate (Used with performance
+                           data) (default: 10000.0)
+  --hashunit STRING        Hashing unit of measure (default: "Ghs")
   -f,--fan_low_warn NUMBER Warning low fan speed threshold in
                            RPMs (default: 999.0)
   -F,--fan_low_crit NUMBER Critical low fan speed threshold in
