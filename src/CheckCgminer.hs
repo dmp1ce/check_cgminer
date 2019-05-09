@@ -179,7 +179,7 @@ minimumFanSpeedThreshold = 0
 data Thresholds = Thresholds TempThresholds HashThresholds FanThresholds
 data TempThresholds = TempThresholds HighWarning HighCritical
 data FanThresholds = FanThresholds LowWarning LowCritical HighWarning HighCritical
-data HashThresholds = HashThresholds HighWarning HighCritical Maximum
+data HashThresholds = HashThresholds LowWarning LowCritical Maximum
 newtype HighWarning = HighWarning Rational
 newtype HighCritical = HighCritical Rational
 newtype LowWarning = LowWarning Rational
@@ -192,7 +192,7 @@ checkStats :: Stats -> Thresholds
 checkStats (Stats temps hashrates fanspeeds)
            (Thresholds
               (TempThresholds (HighWarning tw) (HighCritical tc))
-              (HashThresholds (HighWarning hw) (HighCritical hc) (Maximum hmax))
+              (HashThresholds (LowWarning hw) (LowCritical hc) (Maximum hmax))
               (FanThresholds (LowWarning flw) (LowCritical flc)
               (HighWarning fhw) (HighCritical fhc))) hu = do
   let maxTemp = maximum $ snd <$> temps
@@ -297,7 +297,7 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc) = do
   where
     appRat v = approxRational v 0.0001
     thresholds = (Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
-                 (HashThresholds (HighWarning (appRat hw)) (HighCritical (appRat hc)) (Maximum hmax))
+                 (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))
                  (FanThresholds (LowWarning (appRat flw)) (LowCritical (appRat flc))
                                 (HighWarning (appRat fhw)) (HighCritical ((appRat fhc)))))
 
