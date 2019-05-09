@@ -8,7 +8,8 @@ import Data.Aeson ( ToJSON, FromJSON, toEncoding, genericToEncoding
                   , parseJSON, withObject, (.:), (.:?), Value(Number, Object, String), Array
                   , Object)
 import Data.Aeson.Types (parseEither, Parser)
-import Data.ByteString.Lazy (ByteString, stripSuffix)
+import Data.ByteString.Lazy (ByteString, stripSuffix, toStrict, fromStrict)
+import qualified Data.ByteString as BS
 import Data.Vector ( (!?) )
 import qualified Data.Text as T
 import Text.Read (readEither)
@@ -44,11 +45,19 @@ type TextRationalPair = (T.Text, Rational)
 -- | Decode reply if possible
 decodeReply :: ByteString -> Maybe ReplyApi
 decodeReply bs =
-  let bss = stripSuffix "\NUL" bs
+  let bss = fixJSON bs
       decodeReply' :: Maybe ByteString -> Maybe ReplyApi
       decodeReply' (Just bs') = decodeReply bs'
       decodeReply' Nothing = decode bs
+      fixJSON = ((stripSuffix "\NUL") . fromStrict . (replace "}{" "},{")  . toStrict)
   in decodeReply' bss
+
+-- | For finding broken parts of JSON and fixing them
+replace :: BS.ByteString -> BS.ByteString -> BS.ByteString -> BS.ByteString
+replace p p' b =
+  let (f,s) = BS.breakSubstring p b
+  in if BS.length s == 0 then f
+     else replace p p' $ BS.concat [f, p', BS.drop (BS.length p) s]
 
 -- | Parse stats from Summary section of reply
 getSummary :: ReplyApi -> Either String Stats
@@ -77,13 +86,27 @@ getStats reply = flip parseEither reply $ \r -> do
     Just (String "Antminer S17 Pro") -> parseS17Stats rawStats
     Just (String "Antminer S17") -> parseS17Stats rawStats
     Just (String "Antminer S15") -> parseS15Stats rawStats
+    Just (String "Antminer DR5") -> parseDR5Stats rawStats
+    Just (String "Antminer Z9-Mini") -> parseZ9miniStats rawStats
     Just (String "braiins-am1-s9") -> parseS9Stats rawStats
     Just (String s') -> fail $ "Unexpected miner type: '" ++ T.unpack s' ++ "'"
     Just s' -> fail $ "Unexpected miner type: " ++ show s'
     -- Matches S9 miner case
     Nothing -> parseS9Stats rawStats
   where
+    parseZ9miniStats rawStats = do
+      temps <- parseTextListToRational ["temp1","temp2","temp3"
+                                       ,"temp2_1","temp2_2","temp2_3"] rawStats
+      fans <- parseTextListToRational ["fan1"] rawStats
+      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
+      return $ (Stats temps hrates fans)
 
+    parseDR5Stats rawStats = do
+      temps <- parseTextListToRational ["temp1","temp2","temp3"
+                                       ,"temp2_1","temp2_2","temp2_3"] rawStats
+      fans <- parseTextListToRational ["fan1","fan2"] rawStats
+      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
+      return $ (Stats temps hrates fans)
 
     parseS15Stats rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3","temp4"
