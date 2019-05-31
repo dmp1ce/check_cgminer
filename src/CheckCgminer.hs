@@ -220,7 +220,7 @@ maximumVoltThreshold = 20
 minimumVoltThreshold :: Double
 minimumVoltThreshold = 0
 maximumFreqThreshold :: Double
-maximumFreqThreshold = 2000
+maximumFreqThreshold = 5000
 minimumFreqThreshold :: Double
 minimumFreqThreshold = 0
 

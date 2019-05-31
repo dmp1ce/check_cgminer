@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.5.2.0
+
+- Adjust max frequency threshold to 5000
+
 ## 0.5.1.0
 
 - Fix voltage and frequency bounds in performance data
