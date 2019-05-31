@@ -215,6 +215,14 @@ maximumFanSpeedThreshold :: Double
 maximumFanSpeedThreshold = 20000
 minimumFanSpeedThreshold :: Double
 minimumFanSpeedThreshold = 0
+maximumVoltThreshold :: Double
+maximumVoltThreshold = 20
+minimumVoltThreshold :: Double
+minimumVoltThreshold = 0
+maximumFreqThreshold :: Double
+maximumFreqThreshold = 2000
+minimumFreqThreshold :: Double
+minimumFreqThreshold = 0
 
 data Thresholds = Thresholds TempThresholds HashThresholds FanThresholds VoltageThresholds FrequencyThresholds
 data TempThresholds = TempThresholds HighWarning HighCritical
@@ -273,8 +281,8 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies)
   mapMPerfData addTempData temps
   mapMPerfData addHashData hashrates
   mapMPerfData addFanData fanspeeds
-  mapMPerfData addFanData voltages
-  mapMPerfData addFanData frequencies
+  mapMPerfData addVoltData voltages
+  mapMPerfData addFreqData frequencies
 
   where
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
@@ -283,6 +291,8 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies)
     addFanData s t = addPerfDatum s (RealValue $ fromRational t) NullUnit
                                (Just $ RealValue minimumFanSpeedThreshold)
                                (Just $ RealValue maximumFanSpeedThreshold) Nothing Nothing
+    addVoltData s t = addPerfData s t minimumVoltThreshold maximumVoltThreshold vhw vhc
+    addFreqData s t = addPerfData s t minimumFreqThreshold maximumFreqThreshold freqhw freqhc
 
     addPerfData s t mint maxt w c = addPerfDatum s (RealValue $ fromRational t) NullUnit
                               (Just $ RealValue mint) (Just $ RealValue maxt)

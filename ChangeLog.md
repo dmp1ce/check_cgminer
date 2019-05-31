@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.5.1.0
+
+- Fix voltage and frequency bounds in performance data
+
 ## 0.5.0.0
 
 - Add support for frequency and voltage upper thresholds for S9 devices
