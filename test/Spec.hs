@@ -41,7 +41,16 @@ json = testGroup "json tests"
                            ]
                            [ ("fan5",5040)
                            , ("fan6",3600)
-                           ])
+                           ]
+                           [ ("voltage6",8.9)
+                           , ("voltage7",8.7)
+                           , ("voltage8",8.9)
+                           ]
+                           [ ("freq_avg6",631)
+                           , ("freq_avg7",656)
+                           , ("freq_avg8",631)
+                           ]
+                          )
   , testCase "Successfully decode example reply (Z9-mini)" $
     ((decodeReply exampleReplyZ9mini) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (Z9-mini)" $
@@ -58,7 +67,10 @@ json = testGroup "json tests"
                            , ("chain_rate2",5.14)
                            , ("chain_rate3",5.61)
                            ]
-                           [ ("fan1",4200)])
+                           [ ("fan1",4200)]
+                           []
+                           []
+                          )
   , testCase "Successfully decode example reply (DR5)" $
     ((decodeReply exampleReplyDR5) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (DR5)" $
@@ -77,7 +89,8 @@ json = testGroup "json tests"
                            ]
                            [ ("fan1",3600)
                            , ("fan2",3600)
-                           ])
+                           ][][]
+                          )
   , testCase "Successfully decode example reply (s15)" $
     ((decodeReply exampleReplyS15) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (stock s15)" $
@@ -103,7 +116,8 @@ json = testGroup "json tests"
                            ]
                            [ ("fan1",4080)
                            , ("fan2",4200)
-                           ])
+                           ][][]
+                          )
   , testCase "Successfully decode example reply (s17)" $
     ((decodeReply exampleReplyS17) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (stock s17)" $
@@ -127,7 +141,8 @@ json = testGroup "json tests"
                            , ("fan2",2760)
                            , ("fan3",3720)
                            , ("fan4",3600)
-                           ])
+                           ][][]
+                          )
   , testCase "Successfully decode example reply (Whatsminer)" $
     ((decodeReply exampleReplyWhatsminer) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (whatsminer)" $
@@ -137,7 +152,8 @@ json = testGroup "json tests"
                            [ ("MHS 5s",35523530.10)]
                            [ ("Fan Speed In",6360)
                            , ("Fan Speed Out",6390)
-                           ])
+                           ][][]
+                            )
   ]
 
 checks :: TestTree

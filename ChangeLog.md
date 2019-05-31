@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.5.0.0
+
+- Add support for frequency and voltage upper thresholds for S9 devices
+
 ## 0.4.1.0
 
 - Add support for DR5 and Z9-mini devices

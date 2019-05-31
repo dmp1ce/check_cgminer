@@ -38,6 +38,10 @@ data CliOptions = CliOptions
   , fanspeed_low_error :: Double
   , fanspeed_high_warning :: Double
   , fanspeed_high_error :: Double
+  , voltage_high_warning :: Double
+  , voltage_high_error :: Double
+  , frequency_high_warning :: Double
+  , frequency_high_error :: Double
   }
 
 defaultTempWarningThreshold :: Double
@@ -58,6 +62,14 @@ defaultFanSpeedHighWarningThreshold :: Double
 defaultFanSpeedHighWarningThreshold = 9000
 defaultFanSpeedHighCriticalThreshold :: Double
 defaultFanSpeedHighCriticalThreshold = 10000
+defaultVoltageHighWarningThreshold :: Double
+defaultVoltageHighWarningThreshold = 20
+defaultVoltageHighCriticalThreshold :: Double
+defaultVoltageHighCriticalThreshold = 20
+defaultFrequencyHighWarningThreshold :: Double
+defaultFrequencyHighWarningThreshold = 5000
+defaultFrequencyHighCriticalThreshold :: Double
+defaultFrequencyHighCriticalThreshold = 5000
 
 cliOptions :: Parser CliOptions
 cliOptions = CliOptions
@@ -155,6 +167,34 @@ cliOptions = CliOptions
      <> help "Critical high fan speed threshold in RPMs"
      <> showDefault
       )
+   <*> option auto
+      ( long "volt_high_warn"
+     <> metavar "NUMBER"
+     <> value defaultVoltageHighWarningThreshold
+     <> help "Warning high voltage threshold in Volts (Only supported for S9 miners)"
+     <> showDefault
+      )
+   <*> option auto
+      ( long "volt_high_crit"
+     <> metavar "NUMBER"
+     <> value defaultVoltageHighCriticalThreshold
+     <> help "Critical high voltage threshold in Volts (Only supported for S9 miners)"
+     <> showDefault
+      )
+   <*> option auto
+      ( long "freq_high_warn"
+     <> metavar "NUMBER"
+     <> value defaultFrequencyHighWarningThreshold
+     <> help "Warning high frequency threshold in Mhz (Only supported for S9 miners)"
+     <> showDefault
+      )
+   <*> option auto
+      ( long "freq_high_crit"
+     <> metavar "NUMBER"
+     <> value defaultFrequencyHighCriticalThreshold
+     <> help "Critical high frequency threshold in Mhz (Only supported for S9 miners)"
+     <> showDefault
+      )
 
 anyTempsAreZero :: TextRationalPairs -> Bool
 anyTempsAreZero = any ((== 0) . snd)
@@ -176,10 +216,12 @@ maximumFanSpeedThreshold = 20000
 minimumFanSpeedThreshold :: Double
 minimumFanSpeedThreshold = 0
 
-data Thresholds = Thresholds TempThresholds HashThresholds FanThresholds
+data Thresholds = Thresholds TempThresholds HashThresholds FanThresholds VoltageThresholds FrequencyThresholds
 data TempThresholds = TempThresholds HighWarning HighCritical
 data FanThresholds = FanThresholds LowWarning LowCritical HighWarning HighCritical
 data HashThresholds = HashThresholds LowWarning LowCritical Maximum
+data VoltageThresholds = VoltageThresholds HighWarning HighCritical
+data FrequencyThresholds = FrequencyThresholds HighWarning HighCritical
 newtype HighWarning = HighWarning Rational
 newtype HighCritical = HighCritical Rational
 newtype LowWarning = LowWarning Rational
@@ -189,12 +231,15 @@ newtype Maximum = Maximum Double
 checkStats :: Stats -> Thresholds
            -> String -- | Hashing unit
            -> NagiosPlugin ()
-checkStats (Stats temps hashrates fanspeeds)
+checkStats (Stats temps hashrates fanspeeds voltages frequencies)
            (Thresholds
               (TempThresholds (HighWarning tw) (HighCritical tc))
               (HashThresholds (LowWarning hw) (LowCritical hc) (Maximum hmax))
               (FanThresholds (LowWarning flw) (LowCritical flc)
-              (HighWarning fhw) (HighCritical fhc))) hu = do
+               (HighWarning fhw) (HighCritical fhc))
+              (VoltageThresholds (HighWarning vhw) (HighCritical vhc))
+              (FrequencyThresholds (HighWarning freqhw) (HighCritical freqhc))
+           ) hu = do
   let maxTemp = maximum $ snd <$> temps
   let minHashRates = minimum $ snd <$> hashrates
   addResult OK
@@ -218,10 +263,18 @@ checkStats (Stats temps hashrates fanspeeds)
   addResultIf anyAboveThreshold fanspeeds fhc Critical "Fan speed above critical threshold of " "RPM"
   addResultIf anyAboveThreshold fanspeeds fhw Warning "Fan speed above warning threshold of " "RPM"
 
+  addResultIf anyAboveThreshold voltages vhc Critical "Voltage above critical threshold of " "Volts"
+  addResultIf anyAboveThreshold voltages vhw Warning "Voltage above warning threshold of " "Volts"
+
+  addResultIf anyAboveThreshold frequencies freqhc Critical "Frequencies above critical threshold of " "Mhz"
+  addResultIf anyAboveThreshold frequencies freqhw Warning "Frequencies above warning threshold of " "Mhz"
+
   -- Go through each measurement and it to performance data output
   mapMPerfData addTempData temps
   mapMPerfData addHashData hashrates
   mapMPerfData addFanData fanspeeds
+  mapMPerfData addFanData voltages
+  mapMPerfData addFanData frequencies
 
   where
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
@@ -247,7 +300,7 @@ checkStats (Stats temps hashrates fanspeeds)
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
-tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _) = do
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   r <- sendCGMinerCommand h p c
 
   -- Uncomment for getting the raw reply from a miner for testing
@@ -275,7 +328,7 @@ trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
 execCheck :: CliOptions -> IO ()
-execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc) = do
+execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc) = do
 
   -- Try to get "stats" command first
   eStats <- tryStats opts
@@ -300,6 +353,8 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc) = do
                  (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))
                  (FanThresholds (LowWarning (appRat flw)) (LowCritical (appRat flc))
                                 (HighWarning (appRat fhw)) (HighCritical ((appRat fhc)))))
+                 (VoltageThresholds (HighWarning $ appRat vhw) (HighCritical $ appRat vhc))
+                 (FrequencyThresholds (HighWarning $ appRat freqhw) (HighCritical $ appRat freqhc))
 
 mainExecParser :: IO ()
 mainExecParser = execParser opts >>= execCheck
