@@ -15,6 +15,7 @@ import Options.Applicative
   , value, help, str, auto, showDefault, infoOption)
 import Network.Simple.TCP (connect, send, recv)
 import Data.Aeson (encode)
+import Data.Maybe (isNothing)
 import Control.Monad (when)
 import Control.Monad.Loops (unfoldWhileM)
 import qualified Data.ByteString.Lazy as BL
@@ -259,9 +260,7 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies workMode)
     <> "Min hashrate: " <> T.pack (showFFloat Nothing (toDouble minHashRates) " " ++ hu ++ ", ")
     <> "Min fanspeed: " <> (T.pack . show) (toDouble $ minimum $ snd <$> fanspeeds) <> " RPM"
 
-  if anyTempsAreZero temps
-  then addResult Warning "At least one temperature at 0 C"
-  else return ()
+  when (anyTempsAreZero temps) $ addResult Warning "At least one temperature at 0 C"
 
   addResultIf anyAboveThreshold temps tc Critical "Temperature above critical threshold of " "C"
   addResultIf anyAboveThreshold temps tw Warning "Temperature above warning threshold of " "C"
@@ -287,7 +286,7 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies workMode)
   mapMPerfData addFanData fanspeeds
   mapMPerfData addVoltData voltages
   mapMPerfData addFreqData frequencies
-  maybe (return ()) (\wm -> addPerfData $ PerfDataWorkMode wm) workMode
+  maybe (return ()) (addPerfData . PerfDataWorkMode) workMode
 
   where
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
@@ -302,16 +301,14 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies workMode)
     addPerfData' s t mint maxt w c = addPerfDatum s (RealValue $ fromRational t) NullUnit
                               (Just $ RealValue mint) (Just $ RealValue maxt)
                               (Just $ RealValue $ fromRational w) (Just $ RealValue $ fromRational c)
-    mapMPerfData f l = mapM_ (\x -> f ((removeSpaces . fst) x) (snd x)) l
+    mapMPerfData f = mapM_ (\x -> f ((removeSpaces . fst) x) (snd x))
     removeSpaces = T.map (\x -> if x == ' ' then '_' else x)
 
     toDouble :: Rational -> Double
     toDouble = fromRational
     addResultIf check values threshold resultType msg unit =
-      if check values threshold
-      then addResult resultType $ msg <> (T.pack . show) (toDouble threshold) <> " " <> unit
-      else return ()
-
+      when (check values threshold) $
+      addResult resultType $ msg <> (T.pack . show) (toDouble threshold) <> " " <> unit
 
 newtype PerfDataWorkMode = PerfDataWorkMode WorkMode
 instance ToPerfData PerfDataWorkMode where
@@ -328,8 +325,8 @@ tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   --print r
   --_ <- error ""
 
-  if r == Nothing
-  then return $ Left $ "Could not parse reply from " <> ((T.pack . show) h) <> ":" <> ((T.pack . show) p)
+  if isNothing r
+  then return $ Left $ "Could not parse reply from " <> (T.pack . show) h <> ":" <> (T.pack . show) p
   else do
     let Just r' = BL.fromStrict <$> r
     let mec = f <$> decodeReply r'
@@ -370,10 +367,10 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
                                                          ]
   where
     appRat v = approxRational v 0.0001
-    thresholds = (Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
+    thresholds = Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
                  (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))
                  (FanThresholds (LowWarning (appRat flw)) (LowCritical (appRat flc))
-                                (HighWarning (appRat fhw)) (HighCritical ((appRat fhc)))))
+                                (HighWarning (appRat fhw)) (HighCritical (appRat fhc)))
                  (VoltageThresholds (HighWarning $ appRat vhw) (HighCritical $ appRat vhc))
                  (FrequencyThresholds (HighWarning $ appRat freqhw) (HighCritical $ appRat freqhc))
 
@@ -391,4 +388,4 @@ mainExecParser = execParser opts >>= execCheck
 sendCGMinerCommand :: String -> String -> T.Text -> IO (Maybe BS.ByteString)
 sendCGMinerCommand h p s = connect h p $ \(connectionSocket, _) -> do
     send connectionSocket $ BL.toStrict . encode $ QueryApi s "0"
-    mconcat <$> unfoldWhileM ((/=) Nothing) (recv connectionSocket 4096)
+    mconcat <$> unfoldWhileM (Nothing /=) (recv connectionSocket 4096)

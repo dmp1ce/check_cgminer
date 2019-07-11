@@ -54,7 +54,7 @@ decodeReply bs =
       decodeReply' :: Maybe ByteString -> Maybe ReplyApi
       decodeReply' (Just bs') = decodeReply bs'
       decodeReply' Nothing = decode bs
-      fixJSON = ((stripSuffix "\NUL") . fromStrict . (replace "}{" "},{")  . toStrict)
+      fixJSON = (stripSuffix "\NUL" . fromStrict . replace "}{" "},{"  . toStrict)
   in decodeReply' bss
 
 -- | For finding broken parts of JSON and fixing them
@@ -74,7 +74,7 @@ getSummary reply = flip parseEither reply $ \r -> do
   temps <- parseTextListToRational ["Temperature"] rawStats
   fans <- parseTextListToRational ["Fan Speed In","Fan Speed Out"] rawStats
   hrates <- parseTextListToRational ["MHS 5s"] rawStats
-  return $ (Stats temps hrates fans [] [] Nothing)
+  return $ Stats temps hrates fans [] [] Nothing
 
 -- | Parse `Stats` from STATS section of reply
 getStats :: ReplyApi -> Either String Stats
@@ -104,14 +104,14 @@ getStats reply = flip parseEither reply $ \r -> do
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ (Stats temps hrates fans [] [] Nothing)
+      return $ Stats temps hrates fans [] [] Nothing
 
     parseDR5Stats rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ (Stats temps hrates fans [] [] Nothing)
+      return $ Stats temps hrates fans [] [] Nothing
 
     parseS15Stats rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3","temp4"
@@ -119,7 +119,7 @@ getStats reply = flip parseEither reply $ \r -> do
                                        ,"temp3_1","temp3_2","temp3_3","temp3_4"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3","chain_rate4"] rawStats
-      return $ (Stats temps hrates fans [] [] Nothing)
+      return $ Stats temps hrates fans [] [] Nothing
     parseS17Stats rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"
@@ -127,14 +127,14 @@ getStats reply = flip parseEither reply $ \r -> do
       fans <- parseTextListToRational ["fan1","fan2","fan3","fan4"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
       mode <- parseWorkMode rawStats
-      return $ (Stats temps hrates fans [] [] mode)
+      return $ Stats temps hrates fans [] [] mode
     parseS9Stats rawStats = do
       temps <- parseTextListToRational ["temp6","temp2_6","temp7","temp2_7","temp8","temp2_8"] rawStats
       fans <- parseTextListToRational ["fan5","fan6"] rawStats
       hrates <- parseTextListToRational ["chain_rate6","chain_rate7","chain_rate8"] rawStats
       volts <- parseTextListToRational ["voltage6","voltage7","voltage8"] rawStats
       freqs <- parseTextListToRational ["freq_avg6","freq_avg7","freq_avg8"] rawStats
-      return $ (Stats temps hrates fans volts freqs Nothing)
+      return $ Stats temps hrates fans volts freqs Nothing
 
 -- We really want a rational from the data so make it happen here.
 expectRational :: Value -> Rational
