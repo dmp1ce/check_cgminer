@@ -7,12 +7,15 @@ Nagios monitoring plugin for cgminer API
 module CheckCgminer where
 
 import System.Nagios.Plugin ( runNagiosPlugin, addResult, CheckStatus (OK, Unknown, Warning, Critical), NagiosPlugin
-                            , addPerfDatum, PerfValue (RealValue), UOM (NullUnit) )
+                            , addPerfDatum, addPerfData, PerfValue (RealValue), UOM (NullUnit)
+                            , ToPerfData, toPerfData, PerfValue (RealValue), PerfDatum (PerfDatum) )
+
 import Options.Applicative
   ( execParser, info, header, progDesc, fullDesc, helper, Parser, option, long, short, metavar
   , value, help, str, auto, showDefault, infoOption)
 import Network.Simple.TCP (connect, send, recv)
 import Data.Aeson (encode)
+import Control.Monad (when)
 import Control.Monad.Loops (unfoldWhileM)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as BS
@@ -23,7 +26,8 @@ import Data.Version (showVersion)
 import Data.Either (lefts)
 import Numeric (showFFloat)
 
-import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats), TextRationalPairs, ReplyApi)
+import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats)
+                  , TextRationalPairs, ReplyApi, WorkMode (WorkMode) )
 
 data CliOptions = CliOptions
   { host :: String
@@ -239,7 +243,7 @@ newtype Maximum = Maximum Double
 checkStats :: Stats -> Thresholds
            -> String -- | Hashing unit
            -> NagiosPlugin ()
-checkStats (Stats temps hashrates fanspeeds voltages frequencies)
+checkStats (Stats temps hashrates fanspeeds voltages frequencies workMode)
            (Thresholds
               (TempThresholds (HighWarning tw) (HighCritical tc))
               (HashThresholds (LowWarning hw) (LowCritical hc) (Maximum hmax))
@@ -283,18 +287,19 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies)
   mapMPerfData addFanData fanspeeds
   mapMPerfData addVoltData voltages
   mapMPerfData addFreqData frequencies
+  maybe (return ()) (\wm -> addPerfData $ PerfDataWorkMode wm) workMode
 
   where
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
-    addTempData s t = addPerfData s t minimumTempThreshold maximumTempThreshold tw tc
-    addHashData s t = addPerfData s t minimumHashRateThreshold hmax hw hc
+    addTempData s t = addPerfData' s t minimumTempThreshold maximumTempThreshold tw tc
+    addHashData s t = addPerfData' s t minimumHashRateThreshold hmax hw hc
     addFanData s t = addPerfDatum s (RealValue $ fromRational t) NullUnit
                                (Just $ RealValue minimumFanSpeedThreshold)
                                (Just $ RealValue maximumFanSpeedThreshold) Nothing Nothing
-    addVoltData s t = addPerfData s t minimumVoltThreshold maximumVoltThreshold vhw vhc
-    addFreqData s t = addPerfData s t minimumFreqThreshold maximumFreqThreshold freqhw freqhc
+    addVoltData s t = addPerfData' s t minimumVoltThreshold maximumVoltThreshold vhw vhc
+    addFreqData s t = addPerfData' s t minimumFreqThreshold maximumFreqThreshold freqhw freqhc
 
-    addPerfData s t mint maxt w c = addPerfDatum s (RealValue $ fromRational t) NullUnit
+    addPerfData' s t mint maxt w c = addPerfDatum s (RealValue $ fromRational t) NullUnit
                               (Just $ RealValue mint) (Just $ RealValue maxt)
                               (Just $ RealValue $ fromRational w) (Just $ RealValue $ fromRational c)
     mapMPerfData f l = mapM_ (\x -> f ((removeSpaces . fst) x) (snd x)) l
@@ -307,6 +312,12 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies)
       then addResult resultType $ msg <> (T.pack . show) (toDouble threshold) <> " " <> unit
       else return ()
 
+
+newtype PerfDataWorkMode = PerfDataWorkMode WorkMode
+instance ToPerfData PerfDataWorkMode where
+  toPerfData (PerfDataWorkMode (WorkMode i)) = [ PerfDatum "WorkMode" (RealValue $ fromIntegral i) NullUnit
+                                                 (Just $ RealValue 0) (Just $ RealValue 2) Nothing Nothing
+                                               ]
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)

@@ -5,7 +5,8 @@ import Test.Tasty.HUnit ( testCase, (@?=), (@?) )
 import Data.ByteString.Lazy (ByteString)
 import Data.Aeson (encode)
 
-import CgminerApi (QueryApi (QueryApi), decodeReply, getStats, getSummary, Stats (Stats), replace)
+import CgminerApi ( QueryApi (QueryApi), decodeReply, getStats, getSummary, Stats (Stats), replace
+                  , WorkMode (WorkMode) )
 import CheckCgminer (anyTempsAreZero, anyAboveThreshold, anyBelowThreshold)
 import qualified Data.Text as T
 
@@ -50,6 +51,7 @@ json = testGroup "json tests"
                            , ("freq_avg7",656)
                            , ("freq_avg8",631)
                            ]
+                           Nothing
                           )
   , testCase "Successfully decode example reply (Z9-mini)" $
     ((decodeReply exampleReplyZ9mini) /= Nothing) @? "exampleReply could not be decoded"
@@ -70,6 +72,7 @@ json = testGroup "json tests"
                            [ ("fan1",4200)]
                            []
                            []
+                           Nothing
                           )
   , testCase "Successfully decode example reply (DR5)" $
     ((decodeReply exampleReplyDR5) /= Nothing) @? "exampleReply could not be decoded"
@@ -89,7 +92,7 @@ json = testGroup "json tests"
                            ]
                            [ ("fan1",3600)
                            , ("fan2",3600)
-                           ][][]
+                           ][][] Nothing
                           )
   , testCase "Successfully decode example reply (s15)" $
     ((decodeReply exampleReplyS15) /= Nothing) @? "exampleReply could not be decoded"
@@ -116,7 +119,7 @@ json = testGroup "json tests"
                            ]
                            [ ("fan1",4080)
                            , ("fan2",4200)
-                           ][][]
+                           ][][] Nothing
                           )
   , testCase "Successfully decode example reply (s17)" $
     ((decodeReply exampleReplyS17) /= Nothing) @? "exampleReply could not be decoded"
@@ -141,7 +144,7 @@ json = testGroup "json tests"
                            , ("fan2",2760)
                            , ("fan3",3720)
                            , ("fan4",3600)
-                           ][][]
+                           ][][] (Just $ WorkMode 1)
                           )
   , testCase "Successfully decode example reply (Whatsminer)" $
     ((decodeReply exampleReplyWhatsminer) /= Nothing) @? "exampleReply could not be decoded"
@@ -152,7 +155,7 @@ json = testGroup "json tests"
                            [ ("MHS 5s",35523530.10)]
                            [ ("Fan Speed In",6360)
                            , ("Fan Speed Out",6390)
-                           ][][]
+                           ][][] Nothing
                             )
   ]
 

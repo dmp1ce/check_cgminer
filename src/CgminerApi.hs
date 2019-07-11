@@ -13,7 +13,7 @@ import qualified Data.ByteString as BS
 import Data.Vector ( (!?) )
 import qualified Data.Text as T
 import Text.Read (readEither)
-import Data.Scientific (Scientific)
+import Data.Scientific (Scientific, toBoundedInteger)
 
 data QueryApi = QueryApi
   { command :: Text
@@ -39,10 +39,13 @@ data Stats = Stats { tempuratures :: TextRationalPairs
                    , fanspeeds :: TextRationalPairs
                    , voltages    :: TextRationalPairs
                    , frequencies :: TextRationalPairs
+                   , workMode :: Maybe WorkMode
                    }
   deriving (Eq, Show)
 type TextRationalPairs = [TextRationalPair]
 type TextRationalPair = (T.Text, Rational)
+
+newtype WorkMode = WorkMode Int deriving (Eq, Show)
 
 -- | Decode reply if possible
 decodeReply :: ByteString -> Maybe ReplyApi
@@ -71,7 +74,7 @@ getSummary reply = flip parseEither reply $ \r -> do
   temps <- parseTextListToRational ["Temperature"] rawStats
   fans <- parseTextListToRational ["Fan Speed In","Fan Speed Out"] rawStats
   hrates <- parseTextListToRational ["MHS 5s"] rawStats
-  return $ (Stats temps hrates fans [] [])
+  return $ (Stats temps hrates fans [] [] Nothing)
 
 -- | Parse `Stats` from STATS section of reply
 getStats :: ReplyApi -> Either String Stats
@@ -101,14 +104,14 @@ getStats reply = flip parseEither reply $ \r -> do
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ (Stats temps hrates fans [] [])
+      return $ (Stats temps hrates fans [] [] Nothing)
 
     parseDR5Stats rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ (Stats temps hrates fans [] [])
+      return $ (Stats temps hrates fans [] [] Nothing)
 
     parseS15Stats rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3","temp4"
@@ -116,21 +119,22 @@ getStats reply = flip parseEither reply $ \r -> do
                                        ,"temp3_1","temp3_2","temp3_3","temp3_4"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3","chain_rate4"] rawStats
-      return $ (Stats temps hrates fans [] [])
+      return $ (Stats temps hrates fans [] [] Nothing)
     parseS17Stats rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"
                                        ,"temp3_1","temp3_2","temp3_3"] rawStats
       fans <- parseTextListToRational ["fan1","fan2","fan3","fan4"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ (Stats temps hrates fans [] [])
+      mode <- parseWorkMode rawStats
+      return $ (Stats temps hrates fans [] [] mode)
     parseS9Stats rawStats = do
       temps <- parseTextListToRational ["temp6","temp2_6","temp7","temp2_7","temp8","temp2_8"] rawStats
       fans <- parseTextListToRational ["fan5","fan6"] rawStats
       hrates <- parseTextListToRational ["chain_rate6","chain_rate7","chain_rate8"] rawStats
       volts <- parseTextListToRational ["voltage6","voltage7","voltage8"] rawStats
       freqs <- parseTextListToRational ["freq_avg6","freq_avg7","freq_avg8"] rawStats
-      return $ (Stats temps hrates fans volts freqs)
+      return $ (Stats temps hrates fans volts freqs Nothing)
 
 -- We really want a rational from the data so make it happen here.
 expectRational :: Value -> Rational
@@ -152,3 +156,10 @@ parseTextListToRational ts s = mapM (\t -> do
                                    x <- expectRational <$> s .: t
                                    return (t, x)
                                    ) ts
+
+parseWorkMode :: Object -> Parser (Maybe WorkMode)
+parseWorkMode s = do
+  wm <- s .: "Mode"
+  return $ case wm of
+    (Number n) -> WorkMode <$> toBoundedInteger n
+    _ -> Nothing
