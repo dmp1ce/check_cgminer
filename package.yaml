@@ -39,16 +39,18 @@ library:
   source-dirs: src
   ghc-options: -Wall -Werror -O2
 
+_ghc-options: &ghc-options
+  - -Wall
+  - -Werror
+  - -threaded
+  - -rtsopts
+  - -with-rtsopts=-N
+
 executables:
   check_cgminer:
     main:                Main.hs
     source-dirs:         app
-    ghc-options:
-    - -Wall
-    - -Werror
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+    ghc-options: *ghc-options
     dependencies:
     - check-cgminer
 
@@ -56,12 +58,7 @@ tests:
   check-cgminer-test:
     main:                Spec.hs
     source-dirs:         test
-    ghc-options:
-    - -Wall
-    - -Werror
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+    ghc-options: *ghc-options
     dependencies:
     - check-cgminer
     - tasty
