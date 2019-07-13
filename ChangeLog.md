@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.5.3.0
+
+- Add "work mode" performance data for S17 miners
+
 ## 0.5.2.0
 
 - Adjust max frequency threshold to 5000
