@@ -88,6 +88,7 @@ getStats reply = flip parseEither reply $ \r -> do
   mMinerType <- infoStats .:? "Type"
 
   case mMinerType of
+    Just (String "Antminer S9k") -> parseS9kStats rawStats
     Just (String "Antminer S17 Pro") -> parseS17Stats rawStats
     Just (String "Antminer S17") -> parseS17Stats rawStats
     Just (String "Antminer S15") -> parseS15Stats rawStats
@@ -99,6 +100,7 @@ getStats reply = flip parseEither reply $ \r -> do
     -- Matches S9 miner case
     Nothing -> parseS9Stats rawStats
   where
+    parseS9kStats = parseDR5Stats
     parseZ9miniStats rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats

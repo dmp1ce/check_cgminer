@@ -8,6 +8,7 @@ Tested devices:
 
 - DR5
 - S9
+- S9k
 - S15
 - S17
 - Z9-mini
