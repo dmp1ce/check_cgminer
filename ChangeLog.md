@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.5.4.0
+
+- Add support for Antminer S9k and Antminer S9 SE
+
 ## 0.5.3.0
 
 - Add "work mode" performance data for S17 miners
