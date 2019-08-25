@@ -1,0 +1,41 @@
+name: check-cgminer
+base: core18
+adopt-info: check-cgminer
+summary: Monitoring plugin for cgminer devices # 79 char long summary
+description: |
+  Monitoring plugin for cgminer devices. Creates warning and critical status and
+  performance data for Nagios compatible monitoring platforms.
+architectures:
+  - build-on: amd64
+
+grade: stable # must be 'stable' to release into candidate/stable channels
+confinement: strict # use 'strict' once you have the right plugs and slots
+
+# NOTE: The app name should be check_cgminer to conform with Monitoring Plugin naming
+#       convention but is not currently possible with snapcraft.
+
+apps:
+  check-cgminer:
+    command: check_cgminer
+    plugs:
+      - network
+
+parts:
+  check-cgminer:
+    # See 'snapcraft plugins'
+    plugin: nil
+    source: .
+    override-pull: |
+      snapcraftctl pull
+      snapcraftctl set-version "$(grep version package.yaml | awk '{ print $NF }')"
+    override-build: |
+      if [ ! -x "$(command -v stack)" ]; then
+        curl -sSL https://get.haskellstack.org/ | sh
+      fi
+      stack build --copy-bins
+    organize:
+      /root/.local/bin/check_cgminer: bin/check_cgminer
+    prime:
+      - bin/check_cgminer
+    build-packages:
+      - curl
