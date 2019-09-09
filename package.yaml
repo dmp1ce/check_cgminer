@@ -30,10 +30,18 @@ dependencies:
 - containers
 - vector
 - scientific
+- wreq
+- lens
+- lens-aeson
+- cereal
+- directory
+- filepath
+- time
 
 default-extensions:
   - OverloadedStrings
   - DeriveGeneric
+  - GeneralizedNewtypeDeriving
 
 library:
   source-dirs: src

@@ -12,7 +12,7 @@ import System.Nagios.Plugin ( runNagiosPlugin, addResult, CheckStatus (OK, Unkno
 
 import Options.Applicative
   ( execParser, info, header, progDesc, fullDesc, helper, Parser, option, long, short, metavar
-  , value, help, str, auto, showDefault, infoOption)
+  , value, help, str, auto, showDefault, infoOption, optional)
 import Network.Simple.TCP (connect, send, recv)
 import Data.Aeson (encode)
 import Data.Maybe (isNothing)
@@ -26,9 +26,13 @@ import Paths_check_cgminer (version)
 import Data.Version (showVersion)
 import Data.Either (lefts)
 import Numeric (showFFloat)
+import Data.Time.Clock (nominalDay)
 
 import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats)
-                  , TextRationalPairs, ReplyApi, WorkMode (WorkMode) )
+                  , TextRationalPairs, ReplyApi)
+import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins (Bitcoins), BitcoinUnit (Bitcoin)
+             , Difficulty, EnergyRate (EnergyRate), EnergyUnit (KiloWattHour), MonetaryUnit (USD)
+             , Price, cacheIO, getBitcoinDifficulty, WorkMode (WorkMode), getBitcoinPrice )
 
 data CliOptions = CliOptions
   { host :: String
@@ -47,6 +51,8 @@ data CliOptions = CliOptions
   , voltage_high_error :: Double
   , frequency_high_warning :: Double
   , frequency_high_error :: Double
+  , power_consumption :: Maybe Double
+  , electricity_rate :: Double
   }
 
 defaultTempWarningThreshold :: Double
@@ -75,6 +81,8 @@ defaultFrequencyHighWarningThreshold :: Double
 defaultFrequencyHighWarningThreshold = 5000
 defaultFrequencyHighCriticalThreshold :: Double
 defaultFrequencyHighCriticalThreshold = 5000
+defaultElectricityRate :: Double
+defaultElectricityRate = 0.1188 -- US national average 2019 USD/kWh
 
 cliOptions :: Parser CliOptions
 cliOptions = CliOptions
@@ -200,6 +208,18 @@ cliOptions = CliOptions
      <> help "Critical high frequency threshold in Mhz (Only supported for S9 miners)"
      <> showDefault
       )
+   <*> optional (option auto
+      ( long "device_power"
+     <> metavar "NUMBER"
+     <> help "Override estimated device power consumption in Watt"
+      ))
+   <*> option auto
+      ( long "electric_rate"
+     <> metavar "NUMBER"
+     <> value defaultElectricityRate
+     <> help "Default electricity rate in USD/kWh"
+     <> showDefault
+      )
 
 anyTempsAreZero :: TextRationalPairs -> Bool
 anyTempsAreZero = any ((== 0) . snd)
@@ -240,11 +260,15 @@ newtype HighCritical = HighCritical Rational
 newtype LowWarning = LowWarning Rational
 newtype LowCritical = LowCritical Rational
 newtype Maximum = Maximum Double
+data ProfitabilityFactors = ProfitabilityFactors (Maybe Double) EnergyRate Difficulty Price
 
-checkStats :: Stats -> Thresholds
+checkStats :: Stats
+           -> Maybe ProfitabilityFactors
+           -> Thresholds
            -> String -- | Hashing unit
            -> NagiosPlugin ()
-checkStats (Stats temps hashrates fanspeeds voltages frequencies workMode)
+checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
+           pfs
            (Thresholds
               (TempThresholds (HighWarning tw) (HighCritical tc))
               (HashThresholds (LowWarning hw) (LowCritical hc) (Maximum hmax))
@@ -254,7 +278,8 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies workMode)
               (FrequencyThresholds (HighWarning freqhw) (HighCritical freqhc))
            ) hu = do
   let maxTemp = maximum $ snd <$> temps
-  let minHashRates = minimum $ snd <$> hashrates
+      minHashRates = minimum $ snd <$> hashrates
+
   addResult OK
      $ "Max temp: " <> (T.pack . show) (toDouble maxTemp) <> " C, "
     <> "Min hashrate: " <> T.pack (showFFloat Nothing (toDouble minHashRates) " " ++ hu ++ ", ")
@@ -280,7 +305,25 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies workMode)
   addResultIf anyAboveThreshold frequencies freqhc Critical "Frequencies above critical threshold of " "Mhz"
   addResultIf anyAboveThreshold frequencies freqhw Warning "Frequencies above warning threshold of " "Mhz"
 
-  -- Go through each measurement and it to performance data output
+  -- https://bitcoin.stackexchange.com/questions/8568/equation-for-mining-profit
+  -- TODO: Probably can use Maybe applicative to simplify this code.
+  case pfs of
+    Just (ProfitabilityFactors mpcOverride electricityRate difficulty price) -> do
+      let mPowerConsumption = maybe mpc (Just . Watt . toRational) mpcOverride -- Watt 300
+          mProfitability = case mPowerConsumption of
+                            Just power -> Just $ getProfitability (Ghs (snd <$> hashrates)) difficulty
+                                          (Bitcoins Bitcoin 12.5) (Bitcoins Bitcoin 0)
+                                          power electricityRate price
+                            Nothing -> Nothing
+      case mProfitability of
+        Just profitability -> do
+          when (profitability <= 0) $ addResult Critical "Miner is no longer profitable"
+          addPerfData $ PerfDataProfitability profitability
+        Nothing -> return ()
+    -- Power factors couldn't be figured out so do nothing
+    Nothing -> return ()
+
+  -- Output performance data
   mapMPerfData addTempData temps
   mapMPerfData addHashData hashrates
   mapMPerfData addFanData fanspeeds
@@ -310,6 +353,11 @@ checkStats (Stats temps hashrates fanspeeds voltages frequencies workMode)
       when (check values threshold) $
       addResult resultType $ msg <> (T.pack . show) (toDouble threshold) <> " " <> unit
 
+newtype PerfDataProfitability = PerfDataProfitability Rational
+instance ToPerfData PerfDataProfitability where
+  toPerfData (PerfDataProfitability p) = [ PerfDatum "Profitability" (RealValue $ fromRational p) NullUnit
+                                           Nothing Nothing Nothing Nothing
+                                         ]
 newtype PerfDataWorkMode = PerfDataWorkMode WorkMode
 instance ToPerfData PerfDataWorkMode where
   toPerfData (PerfDataWorkMode (WorkMode i)) = [ PerfDatum "WorkMode" (RealValue $ fromIntegral i) NullUnit
@@ -318,7 +366,7 @@ instance ToPerfData PerfDataWorkMode where
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
-tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   r <- sendCGMinerCommand h p c
 
   -- Uncomment for getting the raw reply from a miner for testing
@@ -346,26 +394,32 @@ trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
 execCheck :: CliOptions -> IO ()
-execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc) = do
-
+execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc mpc erd) = do
   -- Try to get "stats" command first
   eStats <- tryStats opts
-
-  case eStats of
-    Left _ -> return ()
-    Right stats -> runNagiosPlugin $ checkStats stats thresholds hu
+  processStats eStats
 
   -- Something went wrong with stats command so try "summary" next
   eSummary <- trySummary opts
-
-  case eSummary of
-    Left _ -> return ()
-    Right stats -> runNagiosPlugin $ checkStats stats thresholds hu
+  processStats eSummary
 
   runNagiosPlugin $ addResult Unknown $ T.concat $ lefts [ eStats, Left ", "
                                                          , eSummary
                                                          ]
   where
+    processStats e =
+      case e of
+        Left _ -> return ()
+        Right stats -> do
+          pf <- getProfitabilityFactors
+          runNagiosPlugin $ checkStats stats pf thresholds hu
+
+    getProfitabilityFactors :: IO (Maybe ProfitabilityFactors)
+    getProfitabilityFactors = do
+      d <- cacheIO "difficultyCache" nominalDay getBitcoinDifficulty
+      p <- cacheIO "priceCache" nominalDay getBitcoinPrice
+      let er = EnergyRate USD KiloWattHour (toRational erd)
+      return $ ProfitabilityFactors mpc er <$> d <*> p
     appRat v = approxRational v 0.0001
     thresholds = Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
                  (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))
