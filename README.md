@@ -6,18 +6,19 @@ Monitoring (Nagios) plugin for checking cgminer miner devices statistics from th
 
 Tested devices:
 
-- DR5
+- DR5 (no automatic profitability detection)
 - S9
-- S9k
+- S9k (no automatic profitability detection)
 - S9se
 - S15
 - S17
-- Z9-mini
-- Whatsminer
+- Z9-mini (no automatic profitability detection)
+- Whatsminer (no automatic profitability detection)
 
 ## Help
 
 ```
+check_cgminer --help
 check_cgminer - Nagios monitoring plugin for cgminer API
 
 Usage: check_cgminer [-v|--version] [-H|--host HOST] [-P|--port PORT]
@@ -26,6 +27,9 @@ Usage: check_cgminer [-v|--version] [-H|--host HOST] [-P|--port PORT]
                      [--hash_maximum NUMBER] [--hashunit STRING]
                      [-f|--fan_low_warn NUMBER] [-F|--fan_low_crit NUMBER]
                      [-n|--fan_high_warn NUMBER] [-N|--fan_high_crit NUMBER]
+                     [--volt_high_warn NUMBER] [--volt_high_crit NUMBER]
+                     [--freq_high_warn NUMBER] [--freq_high_crit NUMBER]
+                     [--device_power NUMBER] [--electric_rate NUMBER]
   Return Nagios formatted string based on cgminer API returned values
 
 Available options:
@@ -52,6 +56,16 @@ Available options:
   -N,--fan_high_crit NUMBER
                            Critical high fan speed threshold in
                            RPMs (default: 10000.0)
+  --volt_high_warn NUMBER  Warning high voltage threshold in Volts (Only
+                           supported for S9 miners) (default: 20.0)
+  --volt_high_crit NUMBER  Critical high voltage threshold in Volts (Only
+                           supported for S9 miners) (default: 20.0)
+  --freq_high_warn NUMBER  Warning high frequency threshold in Mhz (Only
+                           supported for S9 miners) (default: 5000.0)
+  --freq_high_crit NUMBER  Critical high frequency threshold in Mhz (Only
+                           supported for S9 miners) (default: 5000.0)
+  --device_power NUMBER    Override estimated device power consumption in Watt
+  --electric_rate NUMBER   Default electricity rate in USD/kWh (default: 0.1188)
 ```
 
 ## Usage

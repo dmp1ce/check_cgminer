@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.6.0.0
+
+- Add profitability check
+
 ## 0.5.4.0
 
 - Add support for Antminer S9k and Antminer S9 SE
