@@ -77,22 +77,22 @@ data MiningDevice = AntminerS9SE | AntminerS9k | AntminerDR5 | AntminerS9 | Antm
 -- | Default power consumption lookup
 --   TODO: Fill in remaining devices
 newtype WorkMode = WorkMode Int deriving (Eq, Show)
-miningDevicePowerConsumption :: MiningDevice -> Maybe WorkMode -> Power
+miningDevicePowerConsumption :: MiningDevice -> Maybe WorkMode -> Either String Power
 miningDevicePowerConsumption  = l
   where
-    l AntminerS9SE Nothing = Watt 1280
-    l AntminerS9k Nothing = error "missing Antminer S9k"
-    l AntminerDR5 Nothing = error "missing Antiner DR5"
-    l AntminerS9 Nothing = Watt 1323
-    l AntminerS17 (Just (WorkMode 1)) = Watt 2385
+    l AntminerS9SE Nothing = Right $ Watt 1280
+    l AntminerS9k Nothing = Left "missing Antminer S9k"
+    l AntminerDR5 Nothing = Left "missing Antiner DR5"
+    l AntminerS9 Nothing = Right $ Watt 1323
+    l AntminerS17 (Just (WorkMode 1)) = Right $ Watt 2385
     l AntminerS17 Nothing = l AntminerS17 (Just (WorkMode 1))
-    l AntminerS15 Nothing = Watt 1596
-    l AntminerS17Pro (Just (WorkMode 1)) = Watt 2094
-    l AntminerS17Pro (Just (WorkMode 2)) = error "missing Antminer S17Pro for WorkMode 2"
+    l AntminerS15 Nothing = Right $ Watt 1596
+    l AntminerS17Pro (Just (WorkMode 1)) = Right $ Watt 2094
+    l AntminerS17Pro (Just (WorkMode 2)) = Left "missing Antminer S17Pro for WorkMode 2"
     l AntminerS17Pro Nothing = l AntminerS17Pro (Just (WorkMode 1))
-    l AntminerZ9Mini Nothing = error "missing Antminer Z9Mini"
-    l Whatminer Nothing = Watt 2145
-    l d m = error $ "Fill in remaining lookup table" ++ "type: " ++ show d ++ ", mode: " ++ show m
+    l AntminerZ9Mini Nothing = Left "missing Antminer Z9Mini"
+    l Whatminer Nothing = Right $ Watt 2145
+    l d m = Left $ "Fill in remaining lookup table" ++ "type: " ++ show d ++ ", mode: " ++ show m
 
 -- Price
 getBitcoinPrice :: IO (Maybe Price)

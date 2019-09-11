@@ -116,14 +116,14 @@ getStats reply = flip parseEither reply $ \r -> do
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ Stats (Just p)  temps hrates fans [] [] Nothing
+      return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
     parseDR5Stats d rawStats = do
       let p = miningDevicePowerConsumption d Nothing
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ Stats (Just p) temps hrates fans [] [] Nothing
+      return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
     parseS15Stats d rawStats = do
       let p = miningDevicePowerConsumption d Nothing
       temps <- parseTextListToRational ["temp1","temp2","temp3","temp4"
@@ -131,7 +131,7 @@ getStats reply = flip parseEither reply $ \r -> do
                                        ,"temp3_1","temp3_2","temp3_3","temp3_4"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3","chain_rate4"] rawStats
-      return $ Stats (Just p) temps hrates fans [] [] Nothing
+      return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
     parseS17Stats d rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"
@@ -140,7 +140,7 @@ getStats reply = flip parseEither reply $ \r -> do
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
       mode <- parseWorkMode rawStats
       let p = miningDevicePowerConsumption d mode
-      return $ Stats (Just p) temps hrates fans [] [] mode
+      return $ Stats (eitherToMaybe p) temps hrates fans [] [] mode
     parseS9Stats d rawStats = do
       let p = miningDevicePowerConsumption d Nothing
       temps <- parseTextListToRational ["temp6","temp2_6","temp7","temp2_7","temp8","temp2_8"] rawStats
@@ -148,7 +148,10 @@ getStats reply = flip parseEither reply $ \r -> do
       hrates <- parseTextListToRational ["chain_rate6","chain_rate7","chain_rate8"] rawStats
       volts <- parseTextListToRational ["voltage6","voltage7","voltage8"] rawStats
       freqs <- parseTextListToRational ["freq_avg6","freq_avg7","freq_avg8"] rawStats
-      return $ Stats (Just p) temps hrates fans volts freqs Nothing
+      return $ Stats (eitherToMaybe p) temps hrates fans volts freqs Nothing
+    eitherToMaybe :: Either a b -> Maybe b
+    eitherToMaybe (Right b) = Just b
+    eitherToMaybe (Left _) = Nothing
 
 -- We really want a rational from the data so make it happen here.
 expectRational :: Value -> Rational
