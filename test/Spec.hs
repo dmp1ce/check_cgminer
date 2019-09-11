@@ -63,7 +63,7 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyZ9mini) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (Z9-mini)" $
       let Just x = decodeReply exampleReplyZ9mini
-      in (getStats x) @?= (Right $ Stats undefined
+      in (getStats x) @?= (Right $ Stats Nothing
                            [ ("temp1"::T.Text, 54::Rational)
                            , ("temp2"::T.Text, 53)
                            , ("temp3", 56)
@@ -84,7 +84,7 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyS9k) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (S9k)" $
       let Just x = decodeReply exampleReplyS9k
-      in (getStats x) @?= (Right $ Stats undefined
+      in (getStats x) @?= (Right $ Stats Nothing
                            [ ("temp1"::T.Text, 63::Rational)
                            , ("temp2"::T.Text, 62)
                            , ("temp3", 62)
@@ -128,7 +128,7 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyDR5) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (DR5)" $
       let Just x = decodeReply exampleReplyDR5
-      in (getStats x) @?= (Right $ Stats undefined
+      in (getStats x) @?= (Right $ Stats Nothing
                            [ ("temp1"::T.Text, 62::Rational)
                            , ("temp2"::T.Text, 66)
                            , ("temp3", 60)
