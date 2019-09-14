@@ -75,3 +75,16 @@ Available options:
 $ check_cgminer -H 10.0.0.55 -n 999
 WARNING: Fan speed exceeds warning threshold of 999.0 RPM | fan6=4080.0;;;0.0;20000.0 fan5=5640.0;;;0.0;20000.0 chain_rate8=4537.97;4000.0;3000.0;0.0;10000.0 chain_rate7=4736.95;4000.0;3000.0;0.0;10000.0 chain_rate6=4556.04;4000.0;3000.0;0.0;10000.0 temp2_8=74.0;90.0;100.0;20.0;120.0 temp8=55.0;90.0;100.0;20.0;120.0 temp2_7=71.0;90.0;100.0;20.0;120.0 temp7=54.0;90.0;100.0;20.0;120.0 temp2_6=75.0;90.0;100.0;20.0;120.0 temp6=59.0;90.0;100.0;20.0;120.0
 ```
+
+## Profitability
+
+`check_cgminer` will try to automatically detect the miners profitability by getting several factors.
+
+- Power consumption (Attempts to auto detect miner and use hard coded wattage values by default)
+- Electricity rate (Uses USA national average by default)
+- Bitcoin price (Collected from https://apiv2.bitcoinaverage.com/
+- Difficulty (Collected from https://api-r.bitcoinchain.com/)
+- Block reward (Currently hardcoded at 12.5 BTC)
+- Block fees collected (average) (Currently hardcoded at 0 BTC)
+
+If any of these factors fail to be collected then profitability will not be calculated.
