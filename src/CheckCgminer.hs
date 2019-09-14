@@ -32,7 +32,8 @@ import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stat
                   , TextRationalPairs, ReplyApi)
 import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins (Bitcoins), BitcoinUnit (Bitcoin)
              , Difficulty, EnergyRate (EnergyRate), EnergyUnit (KiloWattHour), MonetaryUnit (USD)
-             , Price, cacheIO, getBitcoinDifficulty, WorkMode (WorkMode), getBitcoinPrice )
+             , Price, cacheIO, getBitcoinDifficulty, WorkMode (WorkMode), getBitcoinPrice, Rate (Rate)
+             , TimeUnit (Day, Second) )
 
 data CliOptions = CliOptions
   { host :: String
@@ -316,9 +317,7 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
                                           power electricityRate price
                             Nothing -> Nothing
       case mProfitability of
-        Just profitability -> do
-          when (profitability <= 0) $ addResult Critical "Miner is no longer profitable"
-          addPerfData $ PerfDataProfitability profitability
+        Just p -> profitabilityPerfData p
         Nothing -> return ()
     -- Power factors couldn't be figured out so do nothing
     Nothing -> return ()
@@ -332,6 +331,11 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
   maybe (return ()) (addPerfData . PerfDataWorkMode) workMode
 
   where
+    profitabilityPerfData :: Rate -> NagiosPlugin ()
+    profitabilityPerfData (Rate USD Second p) = profitabilityPerfData (Rate USD Day (p*24*60*60))
+    profitabilityPerfData prof@(Rate USD Day p) = do
+          when (p <= 0) $ addResult Critical "Miner is no longer profitable"
+          addPerfData $ PerfDataProfitability prof
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
     addTempData s t = addPerfData' s t minimumTempThreshold maximumTempThreshold tw tc
     addHashData s t = addPerfData' s t minimumHashRateThreshold hmax hw hc
@@ -353,11 +357,13 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
       when (check values threshold) $
       addResult resultType $ msg <> (T.pack . show) (toDouble threshold) <> " " <> unit
 
-newtype PerfDataProfitability = PerfDataProfitability Rational
+newtype PerfDataProfitability = PerfDataProfitability Rate
 instance ToPerfData PerfDataProfitability where
-  toPerfData (PerfDataProfitability p) = [ PerfDatum "Profitability" (RealValue $ fromRational p) NullUnit
-                                           Nothing Nothing Nothing Nothing
-                                         ]
+  toPerfData (PerfDataProfitability (Rate USD Second p)) =
+    [ PerfDatum "Profitability" (RealValue $ fromRational (p * 24 * 60 * 60))
+      NullUnit Nothing Nothing Nothing Nothing ]
+  toPerfData (PerfDataProfitability (Rate USD Day p)) =
+    [ PerfDatum "Profitability" (RealValue $ fromRational p) NullUnit Nothing Nothing Nothing Nothing ]
 newtype PerfDataWorkMode = PerfDataWorkMode WorkMode
 instance ToPerfData PerfDataWorkMode where
   toPerfData (PerfDataWorkMode (WorkMode i)) = [ PerfDatum "WorkMode" (RealValue $ fromIntegral i) NullUnit

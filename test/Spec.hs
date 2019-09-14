@@ -1,5 +1,5 @@
 import ReplyExamples
-import Helper ( WorkMode (WorkMode), CacheUTCTime (CacheUTCTime), CacheData(CacheData), TimeUnit (Second)
+import Helper ( WorkMode (WorkMode), CacheUTCTime (CacheUTCTime), CacheData(CacheData), TimeUnit (Second, Day)
               , MonetaryUnit(USD), Rate (Rate), deleteCache, cacheIO, Price (Price), Bitcoins (Bitcoins)
               , BitcoinUnit (Bitcoin), Difficulty (Difficulty), HashRates (Ghs), revenueRate, Time (Time)
               , calculateTimeToGenerateBlock, getProfitability, EnergyUnit (KiloWattHour)
@@ -230,7 +230,7 @@ misc = testGroup "Other testable functionality"
   [ testCase "Replace lazy ByteString substring" $
     (replace  "12345" "" "Hello 1234512345World" @?= "Hello World")
   , testCase "Profitability is greater than 0" $
-    let p = getProfitability (Ghs [57000]) (Difficulty 120033340651.237000)
+    let (Rate USD Day p) = getProfitability (Ghs [57000]) (Difficulty 120033340651.237000)
             (Bitcoins Bitcoin 12.5) (Bitcoins Bitcoin 0)
             (Watt 2500) (EnergyRate USD KiloWattHour 0.09) (Price USD 10000)
     in p >= 0

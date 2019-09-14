@@ -23,7 +23,7 @@ data BitcoinUnit = Bitcoin
 data MonetaryUnit = USD deriving (Show, Generic)
 instance S.Serialize MonetaryUnit
 data EnergyUnit = KiloWattHour
-data TimeUnit = Second deriving (Eq, Show)
+data TimeUnit = Second | Day deriving (Eq, Show)
 
 -- Profitability variables
 newtype HashRates = Ghs [Rational]
@@ -45,7 +45,7 @@ getProfitability :: HashRates -- | All hash rates on device (hash / second)
                  -> Power -- | Devices power consumption (watts)
                  -> EnergyRate -- | Current electricity rate (USD / watt * hour)
                  -> Price -- | Current exchange rate (USD / BTC)
-                 -> Rational -- | USD/second
+                 -> Rate -- | USD/day
 getProfitability hr d br fr (Watt pc)
                  (EnergyRate USD KiloWattHour er) bp =
   let
@@ -53,7 +53,7 @@ getProfitability hr d br fr (Watt pc)
 
     -- Convert Kilowatt Hours to watt seconds
     expenseRatePerSecond = ((pc / 1000) * er) / (60 * 60) -- In USD/second
-  in revenueRateUSD - expenseRatePerSecond
+  in Rate USD Day $ (revenueRateUSD - expenseRatePerSecond) * (24 * 60 * 60)
 
 -- | https://en.bitcoin.it/wiki/Difficulty#How_soon_might_I_expect_to_generate_a_block.3F
 calculateTimeToGenerateBlock :: HashRates -> Difficulty -> Time
@@ -163,3 +163,4 @@ deleteCache k = do
 -- For debugging
 timeToDouble :: Time -> Double
 timeToDouble (Time Second t) = fromRational t
+timeToDouble (Time Day t) = fromRational (t * 24 * 60 * 60)
