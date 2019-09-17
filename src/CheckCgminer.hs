@@ -39,21 +39,23 @@ data CliOptions = CliOptions
   { host :: String
   , port :: String
   , temp_warning :: Double
-  , temp_error :: Double
+  , temp_critical :: Double
   , hashrate_warning :: Double
-  , hashrate_error :: Double
+  , hashrate_critical :: Double
   , hashrate_maximum :: Double
   , hash_unit :: String
   , fanspeed_low_warning :: Double
-  , fanspeed_low_error :: Double
+  , fanspeed_low_critical :: Double
   , fanspeed_high_warning :: Double
-  , fanspeed_high_error :: Double
+  , fanspeed_high_critical :: Double
   , voltage_high_warning :: Double
-  , voltage_high_error :: Double
+  , voltage_high_critical :: Double
   , frequency_high_warning :: Double
-  , frequency_high_error :: Double
+  , frequency_high_critical :: Double
   , power_consumption :: Maybe Double
   , electricity_rate :: Double
+  , profitability_warning :: Double
+  , profitability_critical :: Double
   }
 
 defaultTempWarningThreshold :: Double
@@ -84,6 +86,11 @@ defaultFrequencyHighCriticalThreshold :: Double
 defaultFrequencyHighCriticalThreshold = 5000
 defaultElectricityRate :: Double
 defaultElectricityRate = 0.1188 -- US national average 2019 USD/kWh
+defaultProfitabilityWarningThreshold :: Double
+defaultProfitabilityWarningThreshold = 0.25
+defaultProfitabilityCriticalThreshold :: Double
+defaultProfitabilityCriticalThreshold = 0
+
 
 cliOptions :: Parser CliOptions
 cliOptions = CliOptions
@@ -221,6 +228,20 @@ cliOptions = CliOptions
      <> help "Default electricity rate in USD/kWh"
      <> showDefault
       )
+   <*> option auto
+      ( long "prof_warn"
+     <> metavar "NUMBER"
+     <> value defaultProfitabilityWarningThreshold
+     <> help "Warning profitability threshold in USD/day"
+     <> showDefault
+      )
+   <*> option auto
+      ( long "prof_crit"
+     <> metavar "NUMBER"
+     <> value defaultProfitabilityCriticalThreshold
+     <> help "Critical profitability threshold in USD/day"
+     <> showDefault
+      )
 
 anyTempsAreZero :: TextRationalPairs -> Bool
 anyTempsAreZero = any ((== 0) . snd)
@@ -250,12 +271,14 @@ maximumFreqThreshold = 5000
 minimumFreqThreshold :: Double
 minimumFreqThreshold = 0
 
-data Thresholds = Thresholds TempThresholds HashThresholds FanThresholds VoltageThresholds FrequencyThresholds
+data Thresholds = Thresholds TempThresholds HashThresholds FanThresholds VoltageThresholds
+                  FrequencyThresholds ProfitabilityThresholds
 data TempThresholds = TempThresholds HighWarning HighCritical
 data FanThresholds = FanThresholds LowWarning LowCritical HighWarning HighCritical
 data HashThresholds = HashThresholds LowWarning LowCritical Maximum
 data VoltageThresholds = VoltageThresholds HighWarning HighCritical
 data FrequencyThresholds = FrequencyThresholds HighWarning HighCritical
+data ProfitabilityThresholds = ProfitabilityThresholds LowWarning LowCritical
 newtype HighWarning = HighWarning Rational
 newtype HighCritical = HighCritical Rational
 newtype LowWarning = LowWarning Rational
@@ -277,6 +300,7 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
                (HighWarning fhw) (HighCritical fhc))
               (VoltageThresholds (HighWarning vhw) (HighCritical vhc))
               (FrequencyThresholds (HighWarning freqhw) (HighCritical freqhc))
+              (ProfitabilityThresholds (LowWarning profw) (LowCritical profc))
            ) hu = do
   let maxTemp = maximum $ snd <$> temps
       minHashRates = minimum $ snd <$> hashrates
@@ -317,7 +341,9 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
                                           power electricityRate price
                             Nothing -> Nothing
       case mProfitability of
-        Just p -> profitabilityPerfData p
+        Just p -> do
+          processProfitability p
+          processProfitability p
         Nothing -> return ()
     -- Power factors couldn't be figured out so do nothing
     Nothing -> return ()
@@ -331,11 +357,13 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
   maybe (return ()) (addPerfData . PerfDataWorkMode) workMode
 
   where
-    profitabilityPerfData :: Rate -> NagiosPlugin ()
-    profitabilityPerfData (Rate USD Second p) = profitabilityPerfData (Rate USD Day (p*24*60*60))
-    profitabilityPerfData prof@(Rate USD Day p) = do
-          when (p <= 0) $ addResult Critical "Miner is no longer profitable"
-          addPerfData $ PerfDataProfitability prof
+    processProfitability :: Rate -> NagiosPlugin ()
+    processProfitability (Rate USD Second p) = processProfitability (Rate USD Day (p*24*60*60))
+    processProfitability prof@(Rate USD Day p) = do
+      let m t = ("Profitability is below " <> (T.pack . show . toDouble) t <> " USD/day")
+      when (p < profw) $ addResult Warning $ m profw
+      when (p < profc) $ addResult Critical $ m profc
+      addPerfData $ PerfDataProfitability prof
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
     addTempData s t = addPerfData' s t minimumTempThreshold maximumTempThreshold tw tc
     addHashData s t = addPerfData' s t minimumHashRateThreshold hmax hw hc
@@ -372,7 +400,7 @@ instance ToPerfData PerfDataWorkMode where
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
-tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   r <- sendCGMinerCommand h p c
 
   -- Uncomment for getting the raw reply from a miner for testing
@@ -400,7 +428,7 @@ trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
 execCheck :: CliOptions -> IO ()
-execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc mpc erd) = do
+execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc mpc erd profw profc) = do
   -- Try to get "stats" command first
   eStats <- tryStats opts
   processStats eStats
@@ -433,6 +461,7 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
                                 (HighWarning (appRat fhw)) (HighCritical (appRat fhc)))
                  (VoltageThresholds (HighWarning $ appRat vhw) (HighCritical $ appRat vhc))
                  (FrequencyThresholds (HighWarning $ appRat freqhw) (HighCritical $ appRat freqhc))
+                 (ProfitabilityThresholds (LowWarning $ appRat profw) (LowCritical $ appRat profc))
 
 mainExecParser :: IO ()
 mainExecParser = execParser opts >>= execCheck

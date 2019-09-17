@@ -1,5 +1,11 @@
 # Changelog for check_cgminer
 
+## 0.6.1.0
+
+- Add profitability thresholds
+- Change profitability unit to USD/day
+- Add profitability for S17Pro turbo mode
+
 ## 0.6.0.0
 
 - Add profitability check
