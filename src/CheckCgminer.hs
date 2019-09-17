@@ -300,7 +300,7 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
                (HighWarning fhw) (HighCritical fhc))
               (VoltageThresholds (HighWarning vhw) (HighCritical vhc))
               (FrequencyThresholds (HighWarning freqhw) (HighCritical freqhc))
-              (ProfitabilityThresholds (LowWarning profw) (LowCritical profc))
+              profThresholds@(ProfitabilityThresholds (LowWarning profw) (LowCritical profc))
            ) hu = do
   let maxTemp = maximum $ snd <$> temps
       minHashRates = minimum $ snd <$> hashrates
@@ -343,7 +343,6 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
       case mProfitability of
         Just p -> do
           processProfitability p
-          processProfitability p
         Nothing -> return ()
     -- Power factors couldn't be figured out so do nothing
     Nothing -> return ()
@@ -363,7 +362,7 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
       let m t = ("Profitability is below " <> (T.pack . show . toDouble) t <> " USD/day")
       when (p < profw) $ addResult Warning $ m profw
       when (p < profc) $ addResult Critical $ m profc
-      addPerfData $ PerfDataProfitability prof
+      addPerfData $ PerfDataProfitability prof profThresholds
     addTempData :: T.Text -> Rational -> NagiosPlugin ()
     addTempData s t = addPerfData' s t minimumTempThreshold maximumTempThreshold tw tc
     addHashData s t = addPerfData' s t minimumHashRateThreshold hmax hw hc
@@ -385,13 +384,13 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
       when (check values threshold) $
       addResult resultType $ msg <> (T.pack . show) (toDouble threshold) <> " " <> unit
 
-newtype PerfDataProfitability = PerfDataProfitability Rate
+data PerfDataProfitability = PerfDataProfitability Rate ProfitabilityThresholds
 instance ToPerfData PerfDataProfitability where
-  toPerfData (PerfDataProfitability (Rate USD Second p)) =
-    [ PerfDatum "Profitability" (RealValue $ fromRational (p * 24 * 60 * 60))
-      NullUnit Nothing Nothing Nothing Nothing ]
-  toPerfData (PerfDataProfitability (Rate USD Day p)) =
-    [ PerfDatum "Profitability" (RealValue $ fromRational p) NullUnit Nothing Nothing Nothing Nothing ]
+  toPerfData (PerfDataProfitability (Rate USD Second p) t) =
+    toPerfData $ PerfDataProfitability (Rate USD Day (p * 24 * 60 * 60)) t
+  toPerfData (PerfDataProfitability (Rate USD Day p) (ProfitabilityThresholds (LowWarning lw) (LowCritical lc))) =
+    [ PerfDatum "profitability" (RealValue $ fromRational p) NullUnit Nothing Nothing
+      ((Just . RealValue . fromRational) lw) ((Just . RealValue . fromRational) lc) ]
 newtype PerfDataWorkMode = PerfDataWorkMode WorkMode
 instance ToPerfData PerfDataWorkMode where
   toPerfData (PerfDataWorkMode (WorkMode i)) = [ PerfDatum "WorkMode" (RealValue $ fromIntegral i) NullUnit

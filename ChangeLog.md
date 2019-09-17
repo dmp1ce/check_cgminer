@@ -1,5 +1,10 @@
 # Changelog for check_cgminer
 
+## 0.6.2.0
+
+- Fix duplicate profitability outputs
+- Add thresholds for profitability performance data
+
 ## 0.6.1.0
 
 - Add profitability thresholds
