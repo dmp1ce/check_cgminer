@@ -27,6 +27,7 @@ import Data.Version (showVersion)
 import Data.Either (lefts)
 import Numeric (showFFloat)
 import Data.Time.Clock (nominalDay)
+import Text.Printf (printf)
 
 import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats)
                   , TextRationalPairs, ReplyApi)
@@ -302,13 +303,7 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
               (FrequencyThresholds (HighWarning freqhw) (HighCritical freqhc))
               profThresholds@(ProfitabilityThresholds (LowWarning profw) (LowCritical profc))
            ) hu = do
-  let maxTemp = maximum $ snd <$> temps
-      minHashRates = minimum $ snd <$> hashrates
 
-  addResult OK
-     $ "Max temp: " <> (T.pack . show) (toDouble maxTemp) <> " C, "
-    <> "Min hashrate: " <> T.pack (showFFloat Nothing (toDouble minHashRates) " " ++ hu ++ ", ")
-    <> "Min fanspeed: " <> (T.pack . show) (toDouble $ minimum $ snd <$> fanspeeds) <> " RPM"
 
   when (anyTempsAreZero temps) $ addResult Warning "At least one temperature at 0 C"
 
@@ -343,9 +338,9 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
       case mProfitability of
         Just p -> do
           processProfitability p
-        Nothing -> return ()
+        Nothing -> addResultOK Nothing
     -- Power factors couldn't be figured out so do nothing
-    Nothing -> return ()
+    Nothing -> addResultOK Nothing
 
   -- Output performance data
   mapMPerfData addTempData temps
@@ -356,10 +351,21 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
   maybe (return ()) (addPerfData . PerfDataWorkMode) workMode
 
   where
+    maxTemp = maximum $ snd <$> temps
+    minHashRates = minimum $ snd <$> hashrates
+    addResultOK :: Maybe Rational -> NagiosPlugin ()
+    addResultOK Nothing = addResult OK addResultOKStr
+    addResultOK (Just prof) = addResult OK
+      $ "Profitability is " <> ( T.pack . (printf "%.4f") . toDouble) prof <> " USD/day, " <> addResultOKStr
+    addResultOKStr = "Max temp: " <> (T.pack . show) (toDouble maxTemp) <> " C, "
+      <> "Min hashrate: " <> T.pack (showFFloat Nothing (toDouble minHashRates) " " ++ hu ++ ", ")
+      <> "Min fanspeed: " <> (T.pack . show) (toDouble $ minimum $ snd <$> fanspeeds) <> " RPM"
+
     processProfitability :: Rate -> NagiosPlugin ()
     processProfitability (Rate USD Second p) = processProfitability (Rate USD Day (p*24*60*60))
     processProfitability prof@(Rate USD Day p) = do
       let m t = ("Profitability is below " <> (T.pack . show . toDouble) t <> " USD/day")
+      addResultOK $ Just p
       when (p < profw) $ addResult Warning $ m profw
       when (p < profc) $ addResult Critical $ m profc
       addPerfData $ PerfDataProfitability prof profThresholds
