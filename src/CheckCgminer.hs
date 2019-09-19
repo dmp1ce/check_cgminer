@@ -31,10 +31,10 @@ import Text.Printf (printf)
 
 import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats)
                   , TextRationalPairs, ReplyApi)
-import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins (Bitcoins), BitcoinUnit (Bitcoin)
+import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins
              , Difficulty, EnergyRate (EnergyRate), EnergyUnit (KiloWattHour), MonetaryUnit (USD)
-             , Price, cacheIO, getBitcoinDifficulty, WorkMode (WorkMode), getBitcoinPrice, Rate (Rate)
-             , TimeUnit (Day, Second) )
+             , Price, cacheIO, getBitcoinDifficultyAndReward, WorkMode (WorkMode), getBitcoinPrice, Rate (Rate)
+             , TimeUnit (Day, Second), getBitcoinAverageMiningFeeReward )
 
 data CliOptions = CliOptions
   { host :: String
@@ -285,7 +285,7 @@ newtype HighCritical = HighCritical Rational
 newtype LowWarning = LowWarning Rational
 newtype LowCritical = LowCritical Rational
 newtype Maximum = Maximum Double
-data ProfitabilityFactors = ProfitabilityFactors (Maybe Double) EnergyRate Difficulty Price
+data ProfitabilityFactors = ProfitabilityFactors (Maybe Double) EnergyRate Difficulty Price Bitcoins Bitcoins
 
 checkStats :: Stats
            -> Maybe ProfitabilityFactors
@@ -328,12 +328,11 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
   -- https://bitcoin.stackexchange.com/questions/8568/equation-for-mining-profit
   -- TODO: Probably can use Maybe applicative to simplify this code.
   case pfs of
-    Just (ProfitabilityFactors mpcOverride electricityRate difficulty price) -> do
+    Just (ProfitabilityFactors mpcOverride electricityRate difficulty price blockReward miningFeeReward) -> do
       let mPowerConsumption = maybe mpc (Just . Watt . toRational) mpcOverride -- Watt 300
           mProfitability = case mPowerConsumption of
                             Just power -> Just $ getProfitability (Ghs (snd <$> hashrates)) difficulty
-                                          (Bitcoins Bitcoin 12.5) (Bitcoins Bitcoin 0)
-                                          power electricityRate price
+                                          blockReward miningFeeReward power electricityRate price
                             Nothing -> Nothing
       case mProfitability of
         Just p -> do
@@ -455,10 +454,11 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
 
     getProfitabilityFactors :: IO (Maybe ProfitabilityFactors)
     getProfitabilityFactors = do
-      d <- cacheIO "difficultyCache" nominalDay getBitcoinDifficulty
+      dNr <- cacheIO "difficultyAndRewardCache" nominalDay getBitcoinDifficultyAndReward
+      mr <- cacheIO "minerFeeRewardCache" nominalDay getBitcoinAverageMiningFeeReward
       p <- cacheIO "priceCache" nominalDay getBitcoinPrice
       let er = EnergyRate USD KiloWattHour (toRational erd)
-      return $ ProfitabilityFactors mpc er <$> d <*> p
+      return $ ProfitabilityFactors mpc er <$> (fst <$> dNr) <*> p <*> (snd <$> dNr) <*> mr
     appRat v = approxRational v 0.0001
     thresholds = Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
                  (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))

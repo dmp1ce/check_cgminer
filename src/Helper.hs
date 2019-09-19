@@ -7,8 +7,8 @@ Various Bitcoin specific helper functions
 module Helper where
 
 import qualified Network.Wreq as W
-import Control.Lens ((^?))
-import Data.Aeson.Lens (key, _Number, _String)
+import Control.Lens ((^?), (^..))
+import Data.Aeson.Lens (key, _Number, _String, values)
 import Data.Text.Read (rational)
 import Text.Read (readEither)
 import qualified Data.Serialize as S
@@ -19,7 +19,8 @@ import qualified Data.Time.Clock as C
 import GHC.Generics (Generic)
 
 -- Units
-data BitcoinUnit = Bitcoin
+data BitcoinUnit = Bitcoin deriving (Show, Generic)
+instance S.Serialize BitcoinUnit
 data MonetaryUnit = USD deriving (Show, Generic)
 instance S.Serialize MonetaryUnit
 data EnergyUnit = KiloWattHour
@@ -28,7 +29,8 @@ data TimeUnit = Second | Day deriving (Eq, Show)
 -- Profitability variables
 newtype HashRates = Ghs [Rational]
 newtype Difficulty = Difficulty Rational deriving (Show, S.Serialize)
-data Bitcoins = Bitcoins BitcoinUnit Rational
+data Bitcoins = Bitcoins BitcoinUnit Rational deriving (Show, Generic)
+instance S.Serialize Bitcoins
 newtype Power = Watt Rational deriving (Eq, Show)
 data EnergyRate = EnergyRate MonetaryUnit EnergyUnit Rational
 data Price = Price MonetaryUnit Rational deriving (Show, Generic)
@@ -103,14 +105,35 @@ getBitcoinPrice = do
     Just r' -> return $ Just (Price USD r')
     _ -> return Nothing
 
--- Difficulty
-getBitcoinDifficulty :: IO (Maybe Difficulty)
-getBitcoinDifficulty = do
+-- Difficulty and Block Reward
+getBitcoinDifficultyAndReward :: IO (Maybe (Difficulty, Bitcoins))
+getBitcoinDifficultyAndReward = do
   r <- W.get "https://api-r.bitcoinchain.com/v1/status"
-  case rational <$> r ^? W.responseBody . key "difficulty" . _String of
-    Just (Right (r',_)) -> return $ Just $ Difficulty r'
-    _ -> return Nothing
+  d <- case rational <$> r ^? W.responseBody . key "difficulty" . _String of
+         Just (Right (r',_)) -> return $ Just $ Difficulty r'
+         _ -> return Nothing
+  reward <- case rational <$> r ^? W.responseBody . key "reward" . _String of
+              Just (Right (r',_)) -> return $ Just $ Bitcoins Bitcoin r'
+              _ -> return Nothing
+  return $ (,) <$> d <*> reward
 
+-- Average mining fee per block
+getBitcoinAverageMiningFeeReward :: IO (Maybe Bitcoins)
+getBitcoinAverageMiningFeeReward = do
+  r <- W.get "https://api-r.bitcoinchain.com/v1/blocks/100"
+  let rats = rational <$> r ^.. W.responseBody . values . key "fee" . _String
+  case (/ (toRational . length) rats) <$> (sum . (fst <$>) <$> sequenceA rats) of
+    Right r' -> return $ Just $ Bitcoins Bitcoin r'
+    Left _ -> return Nothing
+
+-- Block reward
+getBitcoinBlockReward :: IO (Maybe Bitcoins)
+getBitcoinBlockReward = do
+  r <- W.get "https://api-r.bitcoinchain.com/v1/blocks/100"
+  let rats = rational <$> r ^.. W.responseBody . values . key "fee" . _String
+  case (/ (toRational . length) rats) <$> (sum . (fst <$>) <$> sequenceA rats) of
+    Right r' -> return $ Just $ Bitcoins Bitcoin r'
+    Left _ -> return Nothing
 
 -- Caching
 newtype CacheUTCTime = CacheUTCTime C.UTCTime deriving (Eq, Show)
