@@ -47,15 +47,19 @@ getProfitability :: HashRates -- | All hash rates on device (hash / second)
                  -> Power -- | Devices power consumption (watts)
                  -> EnergyRate -- | Current electricity rate (USD / watt * hour)
                  -> Price -- | Current exchange rate (USD / BTC)
+                 -> Rational -- | Pool fee percentage
                  -> Rate -- | USD/day
 getProfitability hr d br fr (Watt pc)
-                 (EnergyRate USD KiloWattHour er) bp =
+                 (EnergyRate USD KiloWattHour er) bp pf =
   let
     Rate USD Second revenueRateUSD = revenueRate hr d br fr bp
 
     -- Convert Kilowatt Hours to watt seconds
     expenseRatePerSecond = ((pc / 1000) * er) / (60 * 60) -- In USD/second
-  in Rate USD Day $ (revenueRateUSD - expenseRatePerSecond) * (24 * 60 * 60)
+    poolFee = revenueRateUSD * pf
+    profitRatePerDay = ((revenueRateUSD - expenseRatePerSecond - poolFee) * (24 * 60 * 60))
+
+  in Rate USD Day $ profitRatePerDay
 
 -- | https://en.bitcoin.it/wiki/Difficulty#How_soon_might_I_expect_to_generate_a_block.3F
 calculateTimeToGenerateBlock :: HashRates -> Difficulty -> Time

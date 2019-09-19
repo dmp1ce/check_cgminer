@@ -232,7 +232,7 @@ misc = testGroup "Other testable functionality"
   , testCase "Profitability is greater than 0" $
     let (Rate USD Day p) = getProfitability (Ghs [57000]) (Difficulty 120033340651.237000)
             (Bitcoins Bitcoin 12.5) (Bitcoins Bitcoin 0)
-            (Watt 2500) (EnergyRate USD KiloWattHour 0.09) (Price USD 10000)
+            (Watt 2500) (EnergyRate USD KiloWattHour 0.09) (Price USD 10000) 0
     in p >= 0
     @? ("Profitability was less than 0. Profitability is " ++ show (fromRational p :: Double) ++ " per second.")
   , testCase "Revenue doubles with price doubling" $

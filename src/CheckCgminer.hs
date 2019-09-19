@@ -59,6 +59,7 @@ data CliOptions = CliOptions
   , profitability_critical :: Double
   , block_reward :: Maybe Double
   , mining_fee_reward :: Maybe Double
+  , pool_fee :: Double
   }
 
 defaultTempWarningThreshold :: Double
@@ -93,7 +94,8 @@ defaultProfitabilityWarningThreshold :: Double
 defaultProfitabilityWarningThreshold = 0.25
 defaultProfitabilityCriticalThreshold :: Double
 defaultProfitabilityCriticalThreshold = 0
-
+defaultPoolFee :: Double
+defaultPoolFee = 0
 
 cliOptions :: Parser CliOptions
 cliOptions = CliOptions
@@ -255,6 +257,13 @@ cliOptions = CliOptions
      <> metavar "NUMBER"
      <> help "Override the mining fee reward (default: API lookup)"
       ))
+   <*> option auto
+      ( long "pool_fee"
+     <> metavar "NUMBER"
+     <> value defaultPoolFee
+     <> help "Pool fee percentage. Ex: 0.01 = 1%"
+     <> showDefault
+      )
 
 anyTempsAreZero :: TextRationalPairs -> Bool
 anyTempsAreZero = any ((== 0) . snd)
@@ -297,7 +306,7 @@ newtype HighCritical = HighCritical Rational
 newtype LowWarning = LowWarning Rational
 newtype LowCritical = LowCritical Rational
 newtype Maximum = Maximum Double
-data ProfitabilityFactors = ProfitabilityFactors (Maybe Double) EnergyRate Difficulty Price Bitcoins Bitcoins
+data ProfitabilityFactors = ProfitabilityFactors (Maybe Double) EnergyRate Difficulty Price Bitcoins Bitcoins Rational
 
 checkStats :: Stats
            -> Maybe ProfitabilityFactors
@@ -340,11 +349,11 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
   -- https://bitcoin.stackexchange.com/questions/8568/equation-for-mining-profit
   -- TODO: Probably can use Maybe applicative to simplify this code.
   case pfs of
-    Just (ProfitabilityFactors mpcOverride electricityRate difficulty price blockReward miningFeeReward) -> do
+    Just (ProfitabilityFactors mpcOverride electricityRate difficulty price blockReward miningFeeReward poolFee) -> do
       let mPowerConsumption = maybe mpc (Just . Watt . toRational) mpcOverride -- Watt 300
           mProfitability = case mPowerConsumption of
                             Just power -> Just $ getProfitability (Ghs (snd <$> hashrates)) difficulty
-                                          blockReward miningFeeReward power electricityRate price
+                                          blockReward miningFeeReward power electricityRate price poolFee
                             Nothing -> Nothing
       case mProfitability of
         Just p -> do
@@ -416,7 +425,7 @@ instance ToPerfData PerfDataWorkMode where
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
-tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   r <- sendCGMinerCommand h p c
 
   -- Uncomment for getting the raw reply from a miner for testing
@@ -444,7 +453,7 @@ trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
 execCheck :: CliOptions -> IO ()
-execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc mpc erd profw profc mbr mmfr) = do
+execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc mpc erd profw profc mbr mmfr pfp) = do
   -- Try to get "stats" command first
   eStats <- tryStats opts
   processStats eStats
@@ -472,7 +481,7 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
       let er = EnergyRate USD KiloWattHour (toRational erd)
       return $ ProfitabilityFactors mpc er <$> (fst <$> dNr) <*> p
         <*> (maybe (snd <$> dNr) (\d -> Just (Bitcoins Bitcoin $ toRational d)) mbr)
-        <*> (maybe mr (\d -> Just (Bitcoins Bitcoin $ toRational d)) mmfr)
+        <*> (maybe mr (\d -> Just (Bitcoins Bitcoin $ toRational d)) mmfr) <*> (Just $ toRational pfp)
     appRat v = approxRational v 0.0001
     thresholds = Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
                  (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))
