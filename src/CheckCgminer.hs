@@ -31,10 +31,10 @@ import Text.Printf (printf)
 
 import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats)
                   , TextRationalPairs, ReplyApi)
-import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins
+import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins (Bitcoins), BitcoinUnit (Bitcoin)
              , Difficulty, EnergyRate (EnergyRate), EnergyUnit (KiloWattHour), MonetaryUnit (USD)
              , Price, cacheIO, getBitcoinDifficultyAndReward, WorkMode (WorkMode), getBitcoinPrice, Rate (Rate)
-             , TimeUnit (Day, Second), getBitcoinAverageMiningFeeReward )
+             , TimeUnit (Day, Second), getBitcoinAverageMiningFeeReward)
 
 data CliOptions = CliOptions
   { host :: String
@@ -57,6 +57,8 @@ data CliOptions = CliOptions
   , electricity_rate :: Double
   , profitability_warning :: Double
   , profitability_critical :: Double
+  , block_reward :: Maybe Double
+  , mining_fee_reward :: Maybe Double
   }
 
 defaultTempWarningThreshold :: Double
@@ -243,6 +245,16 @@ cliOptions = CliOptions
      <> help "Critical profitability threshold in USD/day"
      <> showDefault
       )
+  <*> optional (option auto
+      ( long "block_reward"
+     <> metavar "NUMBER"
+     <> help "Override the block reward (default: API lookup)"
+      ))
+  <*> optional (option auto
+      ( long "mining_fee_reward"
+     <> metavar "NUMBER"
+     <> help "Override the mining fee reward (default: API lookup)"
+      ))
 
 anyTempsAreZero :: TextRationalPairs -> Bool
 anyTempsAreZero = any ((== 0) . snd)
@@ -404,7 +416,7 @@ instance ToPerfData PerfDataWorkMode where
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
-tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   r <- sendCGMinerCommand h p c
 
   -- Uncomment for getting the raw reply from a miner for testing
@@ -432,7 +444,7 @@ trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
 execCheck :: CliOptions -> IO ()
-execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc mpc erd profw profc) = do
+execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc mpc erd profw profc mbr mmfr) = do
   -- Try to get "stats" command first
   eStats <- tryStats opts
   processStats eStats
@@ -458,7 +470,9 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
       mr <- cacheIO "minerFeeRewardCache" nominalDay getBitcoinAverageMiningFeeReward
       p <- cacheIO "priceCache" nominalDay getBitcoinPrice
       let er = EnergyRate USD KiloWattHour (toRational erd)
-      return $ ProfitabilityFactors mpc er <$> (fst <$> dNr) <*> p <*> (snd <$> dNr) <*> mr
+      return $ ProfitabilityFactors mpc er <$> (fst <$> dNr) <*> p
+        <*> (maybe (snd <$> dNr) (\d -> Just (Bitcoins Bitcoin $ toRational d)) mbr)
+        <*> (maybe mr (\d -> Just (Bitcoins Bitcoin $ toRational d)) mmfr)
     appRat v = approxRational v 0.0001
     thresholds = Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
                  (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))
