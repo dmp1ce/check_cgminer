@@ -1,5 +1,12 @@
 # Changelog for check_cgminer
 
+## 0.7.0.0 - Profitability improvements
+
+- Show profitability in OK description
+- Dynamically lookup block reward and mining fee reward
+- Allow override of block reward and mining reward in CLI options
+- Add pool fee factor to profitability calculation with CLI option
+
 ## 0.6.2.0
 
 - Fix duplicate profitability outputs
