@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.7.1.0
+
+- Correct workmode for S17 miner
+
 ## 0.7.0.0 - Profitability improvements
 
 - Show profitability in OK description
