@@ -248,7 +248,7 @@ misc = testGroup "Other testable functionality"
     in ((revenue1*2) == revenue2) @? "Revenue 1: (" ++ show (fromRational revenue1 :: Double) ++
        ") Revenue 2: (" ++ show (fromRational revenue2 :: Double) ++ ")"
   , testCase "Known time to generate block from example (about 23.86092 days at 1 Ghs at 20000 difficulty)" $
-    calculateTimeToGenerateBlock (Ghs [1]) (Difficulty 20000) @?= Time Second (268435456 / 3125)
+    calculateTimeToGenerateBlock (Ghs [1]) (Difficulty 20000) @?= (Just $ Time Second (268435456 / 3125))
   , testCase "Revenue is positive" $
     let Rate USD Second x = revenueRate (Ghs [1]) (Difficulty 20000) (Bitcoins Bitcoin 25) (Bitcoins Bitcoin 0) (Price USD 10000)
     in x >= 0 @? "Revenue is less than 0"

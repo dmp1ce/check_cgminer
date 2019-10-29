@@ -62,9 +62,10 @@ getProfitability hr d br fr (Watt pc)
   in Rate USD Day $ profitRatePerDay
 
 -- | https://en.bitcoin.it/wiki/Difficulty#How_soon_might_I_expect_to_generate_a_block.3F
-calculateTimeToGenerateBlock :: HashRates -> Difficulty -> Time
-calculateTimeToGenerateBlock (Ghs hr) (Difficulty d) =
-  Time Second $ (d * (2^ (32::Integer))) / (sum hr * 10^(9::Integer))
+calculateTimeToGenerateBlock :: HashRates -> Difficulty -> Maybe Time
+calculateTimeToGenerateBlock (Ghs hr) (Difficulty d)
+  | sum hr == 0 = Nothing
+  | otherwise = Just $ Time Second $ (d * (2^ (32::Integer))) / (sum hr * 10^(9::Integer))
 
 revenueRate :: HashRates -- | ALl hash rates on device
             -> Difficulty -- | Current difficulty
@@ -73,8 +74,12 @@ revenueRate :: HashRates -- | ALl hash rates on device
             -> Price -- | Current bitcoin price
             -> Rate
 revenueRate hr d (Bitcoins Bitcoin br) (Bitcoins Bitcoin fr) (Price USD p) =
-  let Time Second timeToGenerateBlock = calculateTimeToGenerateBlock hr d
-  in Rate USD Second $ ( (br + fr) / timeToGenerateBlock) * p
+  case calculateTimeToGenerateBlock hr d of
+    Nothing -> Rate USD Second 0
+    Just (Time Second timeToGenerateBlock) -> Rate USD Second $ calc' timeToGenerateBlock
+    Just (Time Day timeToGenerateBlock) -> Rate USD Second $ calc' $ timeToGenerateBlock / (60*60*24)
+  where
+    calc' t = ( (br + fr) / t ) * p
 
 data MiningDevice = AntminerS9SE | AntminerS9k | AntminerDR5 | AntminerS9 | AntminerS17
                   | AntminerS15 | AntminerS17Pro | AntminerZ9Mini | Whatminer
