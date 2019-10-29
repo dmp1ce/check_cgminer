@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.7.2.0
+
+- Fix divide by zero error when a miner hash 0 hash rate
+
 ## 0.7.1.0
 
 - Correct workmode for S17 miner
