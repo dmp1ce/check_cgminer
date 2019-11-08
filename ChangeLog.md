@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.7.3.0
+
+- Add additional error if a HttpExceptionRequest exception occurs for debugging purposes
+
 ## 0.7.2.0
 
 - Fix divide by zero error when a miner hash 0 hash rate
