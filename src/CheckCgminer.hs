@@ -28,7 +28,7 @@ import Data.Either (lefts)
 import Numeric (showFFloat)
 import Data.Time.Clock (nominalDay)
 import Text.Printf (printf)
-import Control.Exception (try, SomeException (SomeException))
+import Control.Exception (catches, IOException, SomeException, Handler (Handler))
 
 import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats)
                   , TextRationalPairs, ReplyApi)
@@ -427,11 +427,12 @@ instance ToPerfData PerfDataWorkMode where
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
 tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
-  re <- try (sendCGMinerCommand h p c)
-
-  let r = case re of
-            Right a -> a
-            Left (SomeException e) -> error $ "sendCGMinerCommand error: " ++ (show e)
+  r <- catches (sendCGMinerCommand h p c)
+       [ Handler (\(e :: IOException) ->
+                    error $ "IOException while sending '" ++ T.unpack c ++ "' command: " ++ (show e)
+                 )
+       , Handler (\(e :: SomeException) -> error $ "sendCGMinerCommand error: " ++ (show e))
+       ]
 
   -- Uncomment for getting the raw reply from a miner for testing
   --print r

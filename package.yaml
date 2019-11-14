@@ -42,6 +42,7 @@ default-extensions:
   - OverloadedStrings
   - DeriveGeneric
   - GeneralizedNewtypeDeriving
+  - ScopedTypeVariables
 
 library:
   source-dirs: src
