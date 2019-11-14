@@ -200,7 +200,7 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyS17Vnish) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (s17 vnish)" $
       let Just x = decodeReply exampleReplyS17Vnish
-      in (getStats x) @?= (Right $ Stats (Just $ Watt 2385)
+      in (getStats x) @?= (Right $ Stats (Just $ Watt 2800)
                            [ ("temp1"::T.Text, 55::Rational)
                            , ("temp2"::T.Text, 57)
                            , ("temp3", 56)
