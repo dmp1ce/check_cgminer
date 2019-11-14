@@ -196,6 +196,31 @@ json = testGroup "json tests"
                            , ("fan4",3600)
                            ][][] (Just $ WorkMode 1)
                           )
+  , testCase "Successfully decode example reply (s17 Vnish)" $
+    ((decodeReply exampleReplyS17Vnish) /= Nothing) @? "exampleReply could not be decoded"
+  , testCase "Can get stats (s17 vnish)" $
+      let Just x = decodeReply exampleReplyS17Vnish
+      in (getStats x) @?= (Right $ Stats (Just $ Watt 2385)
+                           [ ("temp1"::T.Text, 55::Rational)
+                           , ("temp2"::T.Text, 57)
+                           , ("temp3", 56)
+                           , ("temp2_1", 75)
+                           , ("temp2_2", 75)
+                           , ("temp2_3", 75)
+                           , ("temp3_1", 75)
+                           , ("temp3_2", 75)
+                           , ("temp3_3", 75)
+                           ]
+                           [ ("chain_rate1",21765.56)
+                           , ("chain_rate2",21759.19)
+                           , ("chain_rate3",21635.21)
+                           ]
+                           [ ("fan1",0)
+                           , ("fan2",0)
+                           , ("fan3",0)
+                           , ("fan4",0)
+                           ][][] Nothing
+                          )
   , testCase "Successfully decode example reply (Whatsminer)" $
     ((decodeReply exampleReplyWhatsminer) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (whatsminer)" $

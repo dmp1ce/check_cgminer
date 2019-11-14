@@ -83,6 +83,7 @@ revenueRate hr d (Bitcoins Bitcoin br) (Bitcoins Bitcoin fr) (Price USD p) =
 
 data MiningDevice = AntminerS9SE | AntminerS9k | AntminerDR5 | AntminerS9 | AntminerS17
                   | AntminerS15 | AntminerS17Pro | AntminerZ9Mini | Whatminer
+                  | AntminerS17Vnish
   deriving (Ord, Eq, Show)
 
 -- | Default power consumption lookup
@@ -95,6 +96,7 @@ miningDevicePowerConsumption  = l
     l AntminerS9k Nothing = Left "missing Antminer S9k"
     l AntminerDR5 Nothing = Left "missing Antiner DR5"
     l AntminerS9 Nothing = Right $ Watt 1323
+    l AntminerS17Vnish Nothing = Right $ Watt 2800
     l AntminerS17 (Just (WorkMode 1)) = Right $ Watt 1800
     l AntminerS17 (Just (WorkMode 2)) = Right $ Watt 2385
     l AntminerS17 Nothing = l AntminerS17 (Just (WorkMode 2))

@@ -17,6 +17,7 @@ import Data.Scientific (Scientific, toBoundedInteger)
 import Helper ( miningDevicePowerConsumption
               , MiningDevice ( AntminerS9k, AntminerS9SE, AntminerS17Pro, AntminerS17
                              , AntminerS15, AntminerDR5, AntminerZ9Mini, AntminerS9
+                             , AntminerS17Vnish
                              )
               , Power, WorkMode (WorkMode))
 
@@ -97,6 +98,7 @@ getStats reply = flip parseEither reply $ \r -> do
   case mMinerType of
     Just (String "Antminer S9 SE") -> parseS9seStats AntminerS9SE rawStats
     Just (String "Antminer S9k") -> parseS9kStats AntminerS9k rawStats
+    Just (String "Antminer S17 (vnish 0.9.2-alpha)") -> parseS17VnishStats AntminerS17Vnish rawStats
     Just (String "Antminer S17 Pro") -> parseS17Stats AntminerS17Pro rawStats
     Just (String "Antminer S17") -> parseS17Stats AntminerS17 rawStats
     Just (String "Antminer S15") -> parseS15Stats AntminerS15 rawStats
@@ -141,6 +143,14 @@ getStats reply = flip parseEither reply $ \r -> do
       mode <- parseWorkMode rawStats
       let p = miningDevicePowerConsumption d mode
       return $ Stats (eitherToMaybe p) temps hrates fans [] [] mode
+    parseS17VnishStats d rawStats = do
+      let p = miningDevicePowerConsumption d Nothing
+      temps <- parseTextListToRational ["temp1","temp2","temp3"
+                                       ,"temp2_1","temp2_2","temp2_3"
+                                       ,"temp3_1","temp3_2","temp3_3"] rawStats
+      fans <- parseTextListToRational ["fan1","fan2","fan3","fan4"] rawStats
+      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
+      return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
     parseS9Stats d rawStats = do
       let p = miningDevicePowerConsumption d Nothing
       temps <- parseTextListToRational ["temp6","temp2_6","temp7","temp2_7","temp8","temp2_8"] rawStats
