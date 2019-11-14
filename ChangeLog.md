@@ -1,5 +1,11 @@
 # Changelog for check_cgminer
 
+## 0.7.4.0
+
+- Add support for S17 devices with Vnish firmware
+- Add better exception handling when sending command to miner device
+- Update Stack LTS
+
 ## 0.7.3.0
 
 - Add additional error if a HttpExceptionRequest exception occurs for debugging purposes
