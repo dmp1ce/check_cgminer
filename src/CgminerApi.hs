@@ -2,6 +2,7 @@ module CgminerApi where
 
 import GHC.Generics (Generic)
 import Data.Text (Text)
+import Data.List (isPrefixOf)
 import Data.Aeson ( ToJSON, FromJSON, toEncoding, genericToEncoding
                   , defaultOptions
                   , decode
@@ -98,14 +99,16 @@ getStats reply = flip parseEither reply $ \r -> do
   case mMinerType of
     Just (String "Antminer S9 SE") -> parseS9seStats AntminerS9SE rawStats
     Just (String "Antminer S9k") -> parseS9kStats AntminerS9k rawStats
-    Just (String "Antminer S17 (vnish 0.9.2-alpha)") -> parseS17VnishStats AntminerS17Vnish rawStats
     Just (String "Antminer S17 Pro") -> parseS17Stats AntminerS17Pro rawStats
     Just (String "Antminer S17") -> parseS17Stats AntminerS17 rawStats
     Just (String "Antminer S15") -> parseS15Stats AntminerS15 rawStats
     Just (String "Antminer DR5") -> parseDR5Stats AntminerDR5 rawStats
     Just (String "Antminer Z9-Mini") -> parseZ9miniStats AntminerZ9Mini rawStats
     Just (String "braiins-am1-s9") -> parseS9Stats AntminerS9 rawStats
-    Just (String s') -> fail $ "Unexpected miner type: '" ++ T.unpack s' ++ "'"
+    Just (String s') ->
+      if isPrefixOf "Antminer S17 (vnish" (T.unpack s')
+      then parseS17VnishStats AntminerS17Vnish rawStats
+      else fail $ "Unexpected miner type: '" ++ T.unpack s' ++ "'"
     Just s' -> fail $ "Unexpected miner type: " ++ show s'
     -- Matches S9 miner case
     Nothing -> parseS9Stats AntminerS9 rawStats

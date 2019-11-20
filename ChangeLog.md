@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.7.5.0
+
+- Better device matching for vnish devices
+
 ## 0.7.4.0
 
 - Add support for S17 devices with Vnish firmware
