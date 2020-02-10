@@ -138,21 +138,13 @@ getStats reply = flip parseEither reply $ \r -> do
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3","chain_rate4"] rawStats
       return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
     parseS17Stats d rawStats = do
-      temps <- parseTextListToRational ["temp1","temp2","temp3"
-                                       ,"temp2_1","temp2_2","temp2_3"
-                                       ,"temp3_1","temp3_2","temp3_3"] rawStats
-      fans <- parseTextListToRational ["fan1","fan2","fan3","fan4"] rawStats
-      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
+      (temps, fans, hrates) <- s17ParseStats' rawStats
       mode <- parseWorkMode rawStats
       let p = miningDevicePowerConsumption d mode
       return $ Stats (eitherToMaybe p) temps hrates fans [] [] mode
     parseS17VnishStats d rawStats = do
       let p = miningDevicePowerConsumption d Nothing
-      temps <- parseTextListToRational ["temp1","temp2","temp3"
-                                       ,"temp2_1","temp2_2","temp2_3"
-                                       ,"temp3_1","temp3_2","temp3_3"] rawStats
-      fans <- parseTextListToRational ["fan1","fan2","fan3","fan4"] rawStats
-      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
+      (temps, fans, hrates) <- s17ParseStats' rawStats
       return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
     parseS9Stats d rawStats = do
       let p = miningDevicePowerConsumption d Nothing
@@ -165,6 +157,15 @@ getStats reply = flip parseEither reply $ \r -> do
     eitherToMaybe :: Either a b -> Maybe b
     eitherToMaybe (Right b) = Just b
     eitherToMaybe (Left _) = Nothing
+    s17ParseStats' rawStats = do
+      temps <- parseTextListToRational ["temp1","temp2","temp3"
+                                       ,"temp2_1","temp2_2","temp2_3"
+                                       ,"temp3_1","temp3_2","temp3_3"] rawStats
+      fans <- parseTextListToRational ["fan1","fan2","fan3","fan4"] rawStats
+      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
+      return (temps,fans,hrates)
+
+
 
 -- We really want a rational from the data so make it happen here.
 expectRational :: Value -> Rational
