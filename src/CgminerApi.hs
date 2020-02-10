@@ -106,7 +106,7 @@ getStats reply = flip parseEither reply $ \r -> do
     Just (String "Antminer Z9-Mini") -> parseZ9miniStats AntminerZ9Mini rawStats
     Just (String "braiins-am1-s9") -> parseS9Stats AntminerS9 rawStats
     Just (String s') ->
-      if isPrefixOf "Antminer S17 (vnish" (T.unpack s')
+      if "Antminer S17 (vnish" `isPrefixOf ` T.unpack s'
       then parseS17VnishStats AntminerS17Vnish rawStats
       else fail $ "Unexpected miner type: '" ++ T.unpack s' ++ "'"
     Just s' -> fail $ "Unexpected miner type: " ++ show s'
