@@ -1,5 +1,5 @@
 name:                check-cgminer
-version:             0.7.5.0
+version:             0.7.6.0
 github:              "dmp1ce/check_cgminer"
 license:             PublicDomain
 author:              "David Parrish"
