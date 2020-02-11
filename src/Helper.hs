@@ -59,7 +59,7 @@ getProfitability hr d br fr (Watt pc)
     poolFee = revenueRateUSD * pf
     profitRatePerDay = ((revenueRateUSD - expenseRatePerSecond - poolFee) * (24 * 60 * 60))
 
-  in Rate USD Day $ profitRatePerDay
+  in Rate USD Day profitRatePerDay
 
 -- | https://en.bitcoin.it/wiki/Difficulty#How_soon_might_I_expect_to_generate_a_block.3F
 calculateTimeToGenerateBlock :: HashRates -> Difficulty -> Maybe Time

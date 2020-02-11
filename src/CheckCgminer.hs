@@ -382,7 +382,7 @@ checkStats (Stats _ mpc temps hashrates fanspeeds voltages frequencies workMode)
     addResultOK :: Maybe Rational -> NagiosPlugin ()
     addResultOK Nothing = addResult OK addResultOKStr
     addResultOK (Just prof) = addResult OK
-      $ "Profitability is " <> ( T.pack . (printf "%.4f") . toDouble) prof <> " USD/day, " <> addResultOKStr
+      $ "Profitability is " <> ( T.pack . printf "%.4f" . toDouble) prof <> " USD/day, " <> addResultOKStr
     addResultOKStr = "Max temp: " <> (T.pack . show) (toDouble maxTemp) <> " C, "
       <> "Min hashrate: " <> T.pack (showFFloat Nothing (toDouble minHashRates) " " ++ hu ++ ", ")
       <> "Min fanspeed: " <> (T.pack . show) (toDouble $ minimum $ snd <$> fanspeeds) <> " RPM"
@@ -390,7 +390,7 @@ checkStats (Stats _ mpc temps hashrates fanspeeds voltages frequencies workMode)
     processProfitability :: Rate -> NagiosPlugin ()
     processProfitability (Rate USD Second p) = processProfitability (Rate USD Day (p*24*60*60))
     processProfitability prof@(Rate USD Day p) = do
-      let m t = ("Profitability is below " <> (T.pack . show . toDouble) t <> " USD/day")
+      let m t = "Profitability is below " <> (T.pack . show . toDouble) t <> " USD/day"
       addResultOK $ Just p
       when (p < profw) $ addResult Warning $ m profw
       when (p < profc) $ addResult Critical $ m profc
@@ -434,9 +434,9 @@ tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (E
 tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   r <- catches (sendCGMinerCommand h p c)
        [ Handler (\(e :: IOException) ->
-                    error $ "IOException while sending '" ++ T.unpack c ++ "' command: " ++ (show e)
+                    error $ "IOException while sending '" ++ T.unpack c ++ "' command: " ++ show e
                  )
-       , Handler (\(e :: SomeException) -> error $ "sendCGMinerCommand error: " ++ (show e))
+       , Handler (\(e :: SomeException) -> error $ "sendCGMinerCommand error: " ++ show e)
        ]
 
   -- Uncomment for getting the raw reply from a miner for testing
@@ -492,8 +492,8 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
       p <- cacheIO "priceCache" nominalDay getBitcoinPrice
       let er = EnergyRate USD KiloWattHour (toRational erd)
       return $ ProfitabilityFactors mpc er <$> (fst <$> dNr) <*> p
-        <*> (maybe (snd <$> dNr) (\d -> Just (Bitcoins Bitcoin $ toRational d)) mbr)
-        <*> (maybe mr (\d -> Just (Bitcoins Bitcoin $ toRational d)) mmfr) <*> (Just $ toRational pfp)
+        <*> maybe (snd <$> dNr) (\d -> Just (Bitcoins Bitcoin $ toRational d)) mbr
+        <*> maybe mr (\d -> Just (Bitcoins Bitcoin $ toRational d)) mmfr <*> (Just $ toRational pfp)
     appRat v = approxRational v 0.0001
     thresholds = Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
                  (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))
