@@ -7,6 +7,7 @@ import Helper ( WorkMode (WorkMode), CacheUTCTime (CacheUTCTime), CacheData(Cach
 import Test.Tasty ( defaultMain, TestTree, testGroup )
 import Test.Tasty.HUnit ( testCase, (@?=), (@?), assertBool )
 
+import Data.Maybe (isJust)
 import Data.ByteString.Lazy (ByteString)
 import Data.Aeson (encode)
 import qualified Data.Serialize as S
@@ -30,9 +31,9 @@ json :: TestTree
 json = testGroup "json tests"
 
   [ testCase "encode QueryApi should match example command text" $
-    (encode $ QueryApi "summary" "0") @?= exampleSummaryCommand
+    encode (QueryApi "summary" "0") @?= exampleSummaryCommand
   , testCase "Successfully decode example reply (braiinsOS s9)" $
-    ((decodeReply exampleReplyS9BraiinsOS) /= Nothing) @? "exampleReply could not be decoded"
+    isJust (decodeReply exampleReplyS9BraiinsOS) @? "exampleReply could not be decoded"
   , testCase "Can get stats (braiinsOS s9)" $
       let Just x = decodeReply exampleReplyS9BraiinsOS
       in (includePowerConsumption ConstantPower <$> getStats x)
@@ -62,7 +63,7 @@ json = testGroup "json tests"
                            Nothing
                           )
   , testCase "Successfully decode example reply (Z9-mini)" $
-    ((decodeReply exampleReplyZ9mini) /= Nothing) @? "exampleReply could not be decoded"
+    isJust (decodeReply exampleReplyZ9mini) @? "exampleReply could not be decoded"
   , testCase "Can get stats (Z9-mini)" $
       let Just x = decodeReply exampleReplyZ9mini
       in (includePowerConsumption ConstantPower <$> getStats x)
@@ -84,7 +85,7 @@ json = testGroup "json tests"
                            Nothing
                           )
   , testCase "Successfully decode example reply (S9k)" $
-    ((decodeReply exampleReplyS9k) /= Nothing) @? "exampleReply could not be decoded"
+    isJust (decodeReply exampleReplyS9k) @? "exampleReply could not be decoded"
   , testCase "Can get stats (S9k)" $
       let Just x = decodeReply exampleReplyS9k
       in (includePowerConsumption ConstantPower <$> getStats x)
@@ -107,7 +108,7 @@ json = testGroup "json tests"
                            Nothing
                           )
   , testCase "Successfully decode example reply (S9se)" $
-    ((decodeReply exampleReplyS9se) /= Nothing) @? "exampleReply could not be decoded"
+    isJust (decodeReply exampleReplyS9se) @? "exampleReply could not be decoded"
   , testCase "Can get stats (S9se)" $
       let Just x = decodeReply exampleReplyS9se
       in (includePowerConsumption ConstantPower <$> getStats x)
@@ -130,7 +131,7 @@ json = testGroup "json tests"
                            Nothing
                           )
   , testCase "Successfully decode example reply (DR5)" $
-    ((decodeReply exampleReplyDR5) /= Nothing) @? "exampleReply could not be decoded"
+    isJust (decodeReply exampleReplyDR5) @? "exampleReply could not be decoded"
   , testCase "Can get stats (DR5)" $
       let Just x = decodeReply exampleReplyDR5
       in (includePowerConsumption ConstantPower <$> getStats x)
@@ -151,7 +152,7 @@ json = testGroup "json tests"
                            ][][] Nothing
                           )
   , testCase "Successfully decode example reply (s15)" $
-    ((decodeReply exampleReplyS15) /= Nothing) @? "exampleReply could not be decoded"
+    isJust (decodeReply exampleReplyS15) @? "exampleReply could not be decoded"
   , testCase "Can get stats (stock s15)" $
       let Just x = decodeReply exampleReplyS15
       in (includePowerConsumption ConstantPower <$> getStats x)
@@ -179,7 +180,7 @@ json = testGroup "json tests"
                            ][][] Nothing
                           )
   , testCase "Successfully decode example reply (s17 Pro)" $
-    ((decodeReply exampleReplyS17Pro) /= Nothing) @? "exampleReply could not be decoded"
+    isJust (decodeReply exampleReplyS17Pro) @? "exampleReply could not be decoded"
   , testCase "Can get stats (stock s17)" $
       let Just x = decodeReply exampleReplyS17Pro
       in (includePowerConsumption ConstantPower <$> getStats x)
@@ -205,7 +206,7 @@ json = testGroup "json tests"
                            ][][] (Just $ WorkMode 1)
                           )
   , testCase "Successfully decode example reply (s17 Vnish)" $
-    ((decodeReply exampleReplyS17Vnish) /= Nothing) @? "exampleReply could not be decoded"
+    isJust (decodeReply exampleReplyS17Vnish) @? "exampleReply could not be decoded"
   , testCase "Can get stats (s17 vnish)" $
       let Just x = decodeReply exampleReplyS17Vnish
       in (includePowerConsumption ConstantPower <$> getStats x)
@@ -231,7 +232,7 @@ json = testGroup "json tests"
                            ][][] Nothing
                           )
   , testCase "Successfully decode example reply (Whatsminer)" $
-    ((decodeReply exampleReplyWhatsminer) /= Nothing) @? "exampleReply could not be decoded"
+    isJust (decodeReply exampleReplyWhatsminer) @? "exampleReply could not be decoded"
   , testCase "Can get stats (whatsminer)" $
       let Just x = decodeReply exampleReplyWhatsminer
       in (includePowerConsumption ConstantPower <$> getSummary x)
@@ -246,23 +247,23 @@ json = testGroup "json tests"
 
 checks :: TestTree
 checks = testGroup "checks to perform tests"
-  [ testCase "Detect temperatures when at zero" $
-    (anyTempsAreZero ([("", 0),("",55),("",5.5),("",33), ("",0),("",34)]) @?= True)
-  , testCase "Don't detect zero when temperatures NOT at zero" $
-    (anyTempsAreZero ([("",1),("",55),("",5.5),("",33), ("",2), ("",34)]) @?= False)
-  , testCase "Don't detect temps when below threshold" $
-    (anyAboveThreshold ([("",1),("",55)]) (10000.0::Rational) @?= False)
-  , testCase "Detect temps when above threshold" $
-    (anyAboveThreshold ([("",1),("",55),("",200)]) 100 @?= True)
+  [ testCase "Detect temperatures when at zero"
+    (anyTempsAreZero [("", 0),("",55),("",5.5),("",33), ("",0),("",34)] @?= True)
+  , testCase "Don't detect zero when temperatures NOT at zero"
+    (anyTempsAreZero [("",1),("",55),("",5.5),("",33), ("",2), ("",34)] @?= False)
+  , testCase "Don't detect temps when below threshold"
+    (anyAboveThreshold [("",1),("",55)] (10000.0::Rational) @?= False)
+  , testCase "Detect temps when above threshold"
+    (anyAboveThreshold [("",1),("",55),("",200)] 100 @?= True)
   , testCase "Detect hashrates when below threshold" $
-    (anyBelowThreshold) [("", 10), ("",100), ("",44)] 50 @?= True
+    anyBelowThreshold [("", 10), ("",100), ("",44)] 50 @?= True
   , testCase "Don't detect hashrates when above threshold" $
-    (anyBelowThreshold) [("", 10), ("",100), ("",44)] 2 @?= False
+    anyBelowThreshold [("", 10), ("",100), ("",44)] 2 @?= False
   ]
 
 misc :: TestTree
 misc = testGroup "Other testable functionality"
-  [ testCase "Replace lazy ByteString substring" $
+  [ testCase "Replace lazy ByteString substring"
     (replace  "12345" "" "Hello 1234512345World" @?= "Hello World")
   , testCase "Profitability is greater than 0" $
     let (Rate USD Day p) = getProfitability (Ghs [57000]) (Difficulty 120033340651.237000)
