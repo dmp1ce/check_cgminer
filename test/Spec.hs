@@ -3,7 +3,7 @@ import Helper ( WorkMode (WorkMode), CacheUTCTime (CacheUTCTime), CacheData(Cach
               , MonetaryUnit(USD), Rate (Rate), deleteCache, cacheIO, Price (Price), Bitcoins (Bitcoins)
               , BitcoinUnit (Bitcoin), Difficulty (Difficulty), HashRates (Ghs), revenueRate, Time (Time)
               , calculateTimeToGenerateBlock, getProfitability, EnergyUnit (KiloWattHour)
-              , EnergyRate (EnergyRate), Power (Watt) )
+              , EnergyRate (EnergyRate), Power (Watt), MiningDevice (..) )
 import Test.Tasty ( defaultMain, TestTree, testGroup )
 import Test.Tasty.HUnit ( testCase, (@?=), (@?), assertBool )
 
@@ -12,7 +12,8 @@ import Data.Aeson (encode)
 import qualified Data.Serialize as S
 import qualified Data.Time.Clock as C
 
-import CgminerApi ( QueryApi (QueryApi), decodeReply, getStats, getSummary, Stats (Stats), replace )
+import CgminerApi ( QueryApi (QueryApi), decodeReply, getStats, getSummary, Stats (Stats), replace
+                  , includePowerConsumption, PowerStrategy (..) )
 import CheckCgminer (anyTempsAreZero, anyAboveThreshold, anyBelowThreshold)
 import qualified Data.Text as T
 
@@ -34,7 +35,8 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyS9BraiinsOS) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (braiinsOS s9)" $
       let Just x = decodeReply exampleReplyS9BraiinsOS
-      in (getStats x) @?= (Right $ Stats (Just $ Watt 1323)
+      in (includePowerConsumption ConstantPower <$> getStats x)
+         @?= (Right $ Stats (Just AntminerS9) (Just $ Watt 1323)
                            [ ("temp6"::T.Text, 59::Rational)
                            , ("temp2_6"::T.Text, 75)
                            , ("temp7", 54)
@@ -63,7 +65,8 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyZ9mini) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (Z9-mini)" $
       let Just x = decodeReply exampleReplyZ9mini
-      in (getStats x) @?= (Right $ Stats Nothing
+      in (includePowerConsumption ConstantPower <$> getStats x)
+         @?= (Right $ Stats (Just AntminerZ9Mini) Nothing
                            [ ("temp1"::T.Text, 54::Rational)
                            , ("temp2"::T.Text, 53)
                            , ("temp3", 56)
@@ -84,7 +87,8 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyS9k) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (S9k)" $
       let Just x = decodeReply exampleReplyS9k
-      in (getStats x) @?= (Right $ Stats Nothing
+      in (includePowerConsumption ConstantPower <$> getStats x)
+         @?= (Right $ Stats (Just AntminerS9k) Nothing
                            [ ("temp1"::T.Text, 63::Rational)
                            , ("temp2"::T.Text, 62)
                            , ("temp3", 62)
@@ -106,7 +110,8 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyS9se) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (S9se)" $
       let Just x = decodeReply exampleReplyS9se
-      in (getStats x) @?= (Right $ Stats (Just $ Watt 1280)
+      in (includePowerConsumption ConstantPower <$> getStats x)
+         @?= (Right $ Stats (Just AntminerS9SE) (Just $ Watt 1280)
                            [ ("temp1"::T.Text, 60::Rational)
                            , ("temp2"::T.Text, 61)
                            , ("temp3", 62)
@@ -128,7 +133,8 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyDR5) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (DR5)" $
       let Just x = decodeReply exampleReplyDR5
-      in (getStats x) @?= (Right $ Stats Nothing
+      in (includePowerConsumption ConstantPower <$> getStats x)
+         @?= (Right $ Stats (Just AntminerDR5) Nothing
                            [ ("temp1"::T.Text, 62::Rational)
                            , ("temp2"::T.Text, 66)
                            , ("temp3", 60)
@@ -148,7 +154,8 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyS15) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (stock s15)" $
       let Just x = decodeReply exampleReplyS15
-      in (getStats x) @?= (Right $ Stats (Just $ Watt 1596)
+      in (includePowerConsumption ConstantPower <$> getStats x)
+         @?= (Right $ Stats (Just AntminerS15) (Just $ Watt 1596)
                            [ ("temp1"::T.Text, 60::Rational)
                            , ("temp2"::T.Text, 65)
                            , ("temp3", 66)
@@ -175,7 +182,8 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyS17Pro) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (stock s17)" $
       let Just x = decodeReply exampleReplyS17Pro
-      in (getStats x) @?= (Right $ Stats (Just $ Watt 2094)
+      in (includePowerConsumption ConstantPower <$> getStats x)
+         @?= (Right $ Stats (Just AntminerS17Pro) (Just $ Watt 2094)
                            [ ("temp1"::T.Text, 63::Rational)
                            , ("temp2"::T.Text, 63)
                            , ("temp3", 61)
@@ -200,7 +208,8 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyS17Vnish) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (s17 vnish)" $
       let Just x = decodeReply exampleReplyS17Vnish
-      in (getStats x) @?= (Right $ Stats (Just $ Watt 2800)
+      in (includePowerConsumption ConstantPower <$> getStats x)
+         @?= (Right $ Stats (Just AntminerS17Vnish) (Just $ Watt 2800)
                            [ ("temp1"::T.Text, 55::Rational)
                            , ("temp2"::T.Text, 57)
                            , ("temp3", 56)
@@ -225,7 +234,8 @@ json = testGroup "json tests"
     ((decodeReply exampleReplyWhatsminer) /= Nothing) @? "exampleReply could not be decoded"
   , testCase "Can get stats (whatsminer)" $
       let Just x = decodeReply exampleReplyWhatsminer
-      in (getSummary x) @?= (Right $ Stats Nothing
+      in (includePowerConsumption ConstantPower <$> getSummary x)
+         @?= (Right $ Stats Nothing Nothing
                            [ ("Temperature"::T.Text, 75.00::Rational)]
                            [ ("MHS 5s",35523530.10)]
                            [ ("Fan Speed In",6360)
@@ -277,6 +287,10 @@ misc = testGroup "Other testable functionality"
   , testCase "Revenue is positive" $
     let Rate USD Second x = revenueRate (Ghs [1]) (Difficulty 20000) (Bitcoins Bitcoin 25) (Bitcoins Bitcoin 0) (Price USD 10000)
     in x >= 0 @? "Revenue is less than 0"
+  , testCase "includePowerConsumption simple case" $
+    let s = Stats (Just AntminerS17Pro) Nothing [] [("",500),("",500)] [] [] [] Nothing
+    in includePowerConsumption DynamicPower s @?= Stats (Just AntminerS17Pro) (Just (Watt 45)) []
+       [("",500), ("",500)] [] [] [] Nothing
     ]
 
 cache :: TestTree

@@ -31,10 +31,10 @@ Usage: check_cgminer [-v|--version] [-H|--host HOST] [-P|--port PORT]
                      [-n|--fan_high_warn NUMBER] [-N|--fan_high_crit NUMBER]
                      [--volt_high_warn NUMBER] [--volt_high_crit NUMBER]
                      [--freq_high_warn NUMBER] [--freq_high_crit NUMBER]
-                     [--device_power NUMBER] [--electric_rate NUMBER]
-                     [--prof_warn NUMBER] [--prof_crit NUMBER]
-                     [--block_reward NUMBER] [--mining_fee_reward NUMBER]
-                     [--pool_fee NUMBER]
+                     [-d|--dynamic_power] [--device_power NUMBER]
+                     [--electric_rate NUMBER] [--prof_warn NUMBER]
+                     [--prof_crit NUMBER] [--block_reward NUMBER]
+                     [--mining_fee_reward NUMBER] [--pool_fee NUMBER]
   Return Nagios formatted string based on cgminer API returned values
 
 Available options:
@@ -69,6 +69,8 @@ Available options:
                            supported for S9 miners) (default: 5000.0)
   --freq_high_crit NUMBER  Critical high frequency threshold in Mhz (Only
                            supported for S9 miners) (default: 5000.0)
+  -d,--dynamic_power       Enable dynmaic power strategy calculation (Only
+                           supported for S17 miners)
   --device_power NUMBER    Override estimated device power consumption in Watt
   --electric_rate NUMBER   Default electricity rate in USD/kWh (default: 0.1188)
   --prof_warn NUMBER       Warning profitability threshold in

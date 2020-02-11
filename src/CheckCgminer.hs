@@ -12,7 +12,7 @@ import System.Nagios.Plugin ( runNagiosPlugin, addResult, CheckStatus (OK, Unkno
 
 import Options.Applicative
   ( execParser, info, header, progDesc, fullDesc, helper, Parser, option, long, short, metavar
-  , value, help, str, auto, showDefault, infoOption, optional)
+  , value, help, str, auto, showDefault, infoOption, optional, flag)
 import Network.Simple.TCP (connect, send, recv)
 import Data.Aeson (encode)
 import Data.Maybe (isNothing)
@@ -31,7 +31,7 @@ import Text.Printf (printf)
 import Control.Exception (catches, IOException, SomeException, Handler (Handler))
 
 import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats)
-                  , TextRationalPairs, ReplyApi)
+                  , TextRationalPairs, ReplyApi, includePowerConsumption, PowerStrategy (DynamicPower, ConstantPower))
 import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins (Bitcoins), BitcoinUnit (Bitcoin)
              , Difficulty, EnergyRate (EnergyRate), EnergyUnit (KiloWattHour), MonetaryUnit (USD)
              , Price, cacheIO, getBitcoinDifficultyAndReward, WorkMode (WorkMode), getBitcoinPrice, Rate (Rate)
@@ -54,6 +54,7 @@ data CliOptions = CliOptions
   , voltage_high_critical :: Double
   , frequency_high_warning :: Double
   , frequency_high_critical :: Double
+  , power_strategy :: PowerStrategy
   , power_consumption :: Maybe Double
   , electricity_rate :: Double
   , profitability_warning :: Double
@@ -222,6 +223,11 @@ cliOptions = CliOptions
      <> help "Critical high frequency threshold in Mhz (Only supported for S9 miners)"
      <> showDefault
       )
+   <*> flag ConstantPower DynamicPower
+      ( long "dynamic_power"
+     <> short 'd'
+     <> help "Enable dynamic power strategy calculation (Only supported for S17 miners)"
+      )
    <*> optional (option auto
       ( long "device_power"
      <> metavar "NUMBER"
@@ -314,7 +320,7 @@ checkStats :: Stats
            -> Thresholds
            -> String -- | Hashing unit
            -> NagiosPlugin ()
-checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
+checkStats (Stats _ mpc temps hashrates fanspeeds voltages frequencies workMode)
            pfs
            (Thresholds
               (TempThresholds (HighWarning tw) (HighCritical tc))
@@ -357,8 +363,7 @@ checkStats (Stats mpc temps hashrates fanspeeds voltages frequencies workMode)
                                           blockReward miningFeeReward power electricityRate price poolFee
                             Nothing -> Nothing
       case mProfitability of
-        Just p -> do
-          processProfitability p
+        Just p -> processProfitability p
         Nothing -> addResultOK Nothing
     -- Power factors couldn't be figured out so do nothing
     Nothing -> addResultOK Nothing
@@ -426,7 +431,7 @@ instance ToPerfData PerfDataWorkMode where
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
-tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   r <- catches (sendCGMinerCommand h p c)
        [ Handler (\(e :: IOException) ->
                     error $ "IOException while sending '" ++ T.unpack c ++ "' command: " ++ (show e)
@@ -459,7 +464,8 @@ trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
 execCheck :: CliOptions -> IO ()
-execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw freqhc mpc erd profw profc mbr mmfr pfp) = do
+execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw
+                freqhc ps mpc erd profw profc mbr mmfr pfp) = do
   -- Try to get "stats" command first
   eStats <- tryStats opts
   processStats eStats
@@ -477,7 +483,7 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
         Left _ -> return ()
         Right stats -> do
           pf <- getProfitabilityFactors
-          runNagiosPlugin $ checkStats stats pf thresholds hu
+          runNagiosPlugin $ checkStats (includePowerConsumption ps stats) pf thresholds hu
 
     getProfitabilityFactors :: IO (Maybe ProfitabilityFactors)
     getProfitabilityFactors = do

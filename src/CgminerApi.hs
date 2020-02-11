@@ -20,7 +20,7 @@ import Helper ( miningDevicePowerConsumption
                              , AntminerS15, AntminerDR5, AntminerZ9Mini, AntminerS9
                              , AntminerS17Vnish
                              )
-              , Power, WorkMode (WorkMode))
+              , Power (Watt), WorkMode (WorkMode))
 
 data QueryApi = QueryApi
   { command :: Text
@@ -41,7 +41,10 @@ instance FromJSON ReplyApi where
     <*> (v .:? "STATS")
     <*> (v .:? "SUMMARY")
 
-data Stats = Stats { power :: Maybe Power
+data PowerStrategy = ConstantPower | DynamicPower
+
+data Stats = Stats { device :: Maybe MiningDevice
+                   , power :: Maybe Power
                    , tempuratures :: TextRationalPairs
                    , hashrates :: TextRationalPairs
                    , fanspeeds :: TextRationalPairs
@@ -82,7 +85,7 @@ getSummary reply = flip parseEither reply $ \r -> do
   temps <- parseTextListToRational ["Temperature"] rawStats
   fans <- parseTextListToRational ["Fan Speed In","Fan Speed Out"] rawStats
   hrates <- parseTextListToRational ["MHS 5s"] rawStats
-  return $ Stats Nothing temps hrates fans [] [] Nothing
+  return $ Stats Nothing Nothing temps hrates fans [] [] Nothing
 
 
 -- | Parse `Stats` from STATS section of reply
@@ -116,47 +119,38 @@ getStats reply = flip parseEither reply $ \r -> do
     parseS9kStats = parseDR5Stats
     parseS9seStats = parseDR5Stats
     parseZ9miniStats d rawStats = do
-      let p = miningDevicePowerConsumption d Nothing
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
+      return $ Stats (Just d) Nothing temps hrates fans [] [] Nothing
     parseDR5Stats d rawStats = do
-      let p = miningDevicePowerConsumption d Nothing
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
+      return $ Stats (Just d) Nothing temps hrates fans [] [] Nothing
     parseS15Stats d rawStats = do
-      let p = miningDevicePowerConsumption d Nothing
       temps <- parseTextListToRational ["temp1","temp2","temp3","temp4"
                                        ,"temp2_1","temp2_2","temp2_3","temp2_4"
                                        ,"temp3_1","temp3_2","temp3_3","temp3_4"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3","chain_rate4"] rawStats
-      return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
+      return $ Stats (Just d) Nothing temps hrates fans [] [] Nothing
     parseS17Stats d rawStats = do
       (temps, fans, hrates) <- s17ParseStats' rawStats
       mode <- parseWorkMode rawStats
-      let p = miningDevicePowerConsumption d mode
-      return $ Stats (eitherToMaybe p) temps hrates fans [] [] mode
+      return $ Stats (Just d) Nothing temps hrates fans [] [] mode
     parseS17VnishStats d rawStats = do
-      let p = miningDevicePowerConsumption d Nothing
       (temps, fans, hrates) <- s17ParseStats' rawStats
-      return $ Stats (eitherToMaybe p) temps hrates fans [] [] Nothing
+      return $ Stats (Just d) Nothing temps hrates fans [] [] Nothing
     parseS9Stats d rawStats = do
-      let p = miningDevicePowerConsumption d Nothing
       temps <- parseTextListToRational ["temp6","temp2_6","temp7","temp2_7","temp8","temp2_8"] rawStats
       fans <- parseTextListToRational ["fan5","fan6"] rawStats
       hrates <- parseTextListToRational ["chain_rate6","chain_rate7","chain_rate8"] rawStats
       volts <- parseTextListToRational ["voltage6","voltage7","voltage8"] rawStats
       freqs <- parseTextListToRational ["freq_avg6","freq_avg7","freq_avg8"] rawStats
-      return $ Stats (eitherToMaybe p) temps hrates fans volts freqs Nothing
-    eitherToMaybe :: Either a b -> Maybe b
-    eitherToMaybe (Right b) = Just b
-    eitherToMaybe (Left _) = Nothing
+      return $ Stats (Just d) Nothing temps hrates fans volts freqs Nothing
     s17ParseStats' rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"
@@ -165,7 +159,22 @@ getStats reply = flip parseEither reply $ \r -> do
       hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
       return (temps,fans,hrates)
 
-
+-- | Update Stats with power consumption.
+--   The power consumption can be calculated as a constant or dynamic power
+--   Dynamic power is based off of hash rate
+--   If the power cannot be calculated then nothing is changed in the statistics.
+includePowerConsumption :: PowerStrategy -> Stats -> Stats
+includePowerConsumption DynamicPower s@(Stats (Just AntminerS17Pro) _ _ h _ _ _ _) =
+  -- 45W per TH
+  s {power = Just $ Watt $ sum (snd <$> h) * 0.045}
+includePowerConsumption ConstantPower s@(Stats (Just d) _ _ _ _ _ _ m) =
+  s {power = eitherToMaybe $ miningDevicePowerConsumption d m}
+  where
+    eitherToMaybe :: Either a b -> Maybe b
+    eitherToMaybe (Right b) = Just b
+    eitherToMaybe (Left _) = Nothing
+includePowerConsumption _ s@(Stats (Just _) _ _ _ _ _ _ _) = s
+includePowerConsumption _ s@(Stats Nothing _ _ _ _ _ _ _) = s
 
 -- We really want a rational from the data so make it happen here.
 expectRational :: Value -> Rational
