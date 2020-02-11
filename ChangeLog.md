@@ -1,5 +1,10 @@
 # Changelog for check_cgminer
 
+## 0.7.6.0
+
+- Add dynamic power calculation strategy when calculating profitability
+- Apply hlint suggestions
+
 ## 0.7.5.0
 
 - Better device matching for vnish devices
