@@ -138,15 +138,6 @@ getBitcoinAverageMiningFeeReward = do
     Right r' -> return $ Just $ Bitcoins Bitcoin r'
     Left _ -> return Nothing
 
--- Block reward
-getBitcoinBlockReward :: IO (Maybe Bitcoins)
-getBitcoinBlockReward = do
-  r <- W.get "https://api-r.bitcoinchain.com/v1/blocks/100"
-  let rats = rational <$> r ^.. W.responseBody . values . key "fee" . _String
-  case (/ (toRational . length) rats) <$> (sum . (fst <$>) <$> sequenceA rats) of
-    Right r' -> return $ Just $ Bitcoins Bitcoin r'
-    Left _ -> return Nothing
-
 -- Caching
 newtype CacheUTCTime = CacheUTCTime C.UTCTime deriving (Eq, Show)
 instance S.Serialize CacheUTCTime where
