@@ -37,7 +37,7 @@ json = testGroup "json tests"
   , testCase "Can get stats (braiinsOS s9)" $
       let Just x = decodeReply exampleReplyS9BraiinsOS
       in (includePowerConsumption ConstantPower <$> getStats x)
-         @?= (Right $ Stats (Just AntminerS9) (Just $ Watt 1323)
+         @?= Right ( Stats (Just AntminerS9) (Just $ Watt 1323)
                            [ ("temp6"::T.Text, 59::Rational)
                            , ("temp2_6"::T.Text, 75)
                            , ("temp7", 54)
@@ -67,7 +67,7 @@ json = testGroup "json tests"
   , testCase "Can get stats (Z9-mini)" $
       let Just x = decodeReply exampleReplyZ9mini
       in (includePowerConsumption ConstantPower <$> getStats x)
-         @?= (Right $ Stats (Just AntminerZ9Mini) Nothing
+         @?= Right ( Stats (Just AntminerZ9Mini) Nothing
                            [ ("temp1"::T.Text, 54::Rational)
                            , ("temp2"::T.Text, 53)
                            , ("temp3", 56)
@@ -89,7 +89,7 @@ json = testGroup "json tests"
   , testCase "Can get stats (S9k)" $
       let Just x = decodeReply exampleReplyS9k
       in (includePowerConsumption ConstantPower <$> getStats x)
-         @?= (Right $ Stats (Just AntminerS9k) Nothing
+         @?= Right ( Stats (Just AntminerS9k) Nothing
                            [ ("temp1"::T.Text, 63::Rational)
                            , ("temp2"::T.Text, 62)
                            , ("temp3", 62)
@@ -112,7 +112,7 @@ json = testGroup "json tests"
   , testCase "Can get stats (S9se)" $
       let Just x = decodeReply exampleReplyS9se
       in (includePowerConsumption ConstantPower <$> getStats x)
-         @?= (Right $ Stats (Just AntminerS9SE) (Just $ Watt 1280)
+         @?= Right ( Stats (Just AntminerS9SE) (Just $ Watt 1280)
                            [ ("temp1"::T.Text, 60::Rational)
                            , ("temp2"::T.Text, 61)
                            , ("temp3", 62)
@@ -135,7 +135,7 @@ json = testGroup "json tests"
   , testCase "Can get stats (DR5)" $
       let Just x = decodeReply exampleReplyDR5
       in (includePowerConsumption ConstantPower <$> getStats x)
-         @?= (Right $ Stats (Just AntminerDR5) Nothing
+         @?= Right ( Stats (Just AntminerDR5) Nothing
                            [ ("temp1"::T.Text, 62::Rational)
                            , ("temp2"::T.Text, 66)
                            , ("temp3", 60)
@@ -156,7 +156,7 @@ json = testGroup "json tests"
   , testCase "Can get stats (stock s15)" $
       let Just x = decodeReply exampleReplyS15
       in (includePowerConsumption ConstantPower <$> getStats x)
-         @?= (Right $ Stats (Just AntminerS15) (Just $ Watt 1596)
+         @?= Right ( Stats (Just AntminerS15) (Just $ Watt 1596)
                            [ ("temp1"::T.Text, 60::Rational)
                            , ("temp2"::T.Text, 65)
                            , ("temp3", 66)
@@ -184,7 +184,7 @@ json = testGroup "json tests"
   , testCase "Can get stats (stock s17)" $
       let Just x = decodeReply exampleReplyS17Pro
       in (includePowerConsumption ConstantPower <$> getStats x)
-         @?= (Right $ Stats (Just AntminerS17Pro) (Just $ Watt 2094)
+         @?= Right ( Stats (Just AntminerS17Pro) (Just $ Watt 2094)
                            [ ("temp1"::T.Text, 63::Rational)
                            , ("temp2"::T.Text, 63)
                            , ("temp3", 61)
@@ -210,7 +210,7 @@ json = testGroup "json tests"
   , testCase "Can get stats (s17 vnish)" $
       let Just x = decodeReply exampleReplyS17Vnish
       in (includePowerConsumption ConstantPower <$> getStats x)
-         @?= (Right $ Stats (Just AntminerS17Vnish) (Just $ Watt 2800)
+         @?= Right ( Stats (Just AntminerS17Vnish) (Just $ Watt 2800)
                            [ ("temp1"::T.Text, 55::Rational)
                            , ("temp2"::T.Text, 57)
                            , ("temp3", 56)
@@ -236,7 +236,7 @@ json = testGroup "json tests"
   , testCase "Can get stats (whatsminer)" $
       let Just x = decodeReply exampleReplyWhatsminer
       in (includePowerConsumption ConstantPower <$> getSummary x)
-         @?= (Right $ Stats Nothing Nothing
+         @?= Right ( Stats Nothing Nothing
                            [ ("Temperature"::T.Text, 75.00::Rational)]
                            [ ("MHS 5s",35523530.10)]
                            [ ("Fan Speed In",6360)
@@ -284,7 +284,7 @@ misc = testGroup "Other testable functionality"
     in ((revenue1*2) == revenue2) @? "Revenue 1: (" ++ show (fromRational revenue1 :: Double) ++
        ") Revenue 2: (" ++ show (fromRational revenue2 :: Double) ++ ")"
   , testCase "Known time to generate block from example (about 23.86092 days at 1 Ghs at 20000 difficulty)" $
-    calculateTimeToGenerateBlock (Ghs [1]) (Difficulty 20000) @?= (Just $ Time Second (268435456 / 3125))
+    calculateTimeToGenerateBlock (Ghs [1]) (Difficulty 20000) @?= Just (Time Second (268435456 / 3125))
   , testCase "Revenue is positive" $
     let Rate USD Second x = revenueRate (Ghs [1]) (Difficulty 20000) (Bitcoins Bitcoin 25) (Bitcoins Bitcoin 0) (Price USD 10000)
     in x >= 0 @? "Revenue is less than 0"
