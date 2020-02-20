@@ -493,7 +493,7 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
       let er = EnergyRate USD KiloWattHour (toRational erd)
       return $ ProfitabilityFactors mpc er <$> (fst <$> dNr) <*> p
         <*> maybe (snd <$> dNr) (\d -> Just (Bitcoins Bitcoin $ toRational d)) mbr
-        <*> maybe mr (\d -> Just (Bitcoins Bitcoin $ toRational d)) mmfr <*> (Just $ toRational pfp)
+        <*> maybe mr (\d -> Just (Bitcoins Bitcoin $ toRational d)) mmfr <*> Just (toRational pfp)
     appRat v = approxRational v 0.0001
     thresholds = Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
                  (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))
