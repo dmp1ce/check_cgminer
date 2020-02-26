@@ -6,14 +6,14 @@ Monitoring (Nagios) plugin for checking cgminer miner devices statistics from th
 
 Tested devices:
 
-- DR5 (missing power consumption default)
+- DR5 (missing power consumption default and ideal hashrate percentage)
 - S9
 - S9k (missing power consumption default)
 - S9se
 - S15
 - S17
-- Z9-mini (missing power consumption default)
-- Whatsminer (missing power consumption default)
+- Z9-mini (missing power consumption default and ideal hashrate percentage)
+- Whatsminer (missing power consumption default and ideal hashrate percentage)
 
 Devices missing power consumption defaults will not calculate profitability unless `--device_power` is used.
 
@@ -26,15 +26,18 @@ check_cgminer - Nagios monitoring plugin for cgminer API
 Usage: check_cgminer [-v|--version] [-H|--host HOST] [-P|--port PORT]
                      [-t|--temp_warn NUMBER] [-T|--temp_crit NUMBER]
                      [-r|--hash_warn NUMBER] [-R|--hash_crit NUMBER]
-                     [--hash_maximum NUMBER] [--hashunit STRING]
-                     [-f|--fan_low_warn NUMBER] [-F|--fan_low_crit NUMBER]
-                     [-n|--fan_high_warn NUMBER] [-N|--fan_high_crit NUMBER]
-                     [--volt_high_warn NUMBER] [--volt_high_crit NUMBER]
-                     [--freq_high_warn NUMBER] [--freq_high_crit NUMBER]
-                     [-d|--dynamic_power] [--device_power NUMBER]
-                     [--electric_rate NUMBER] [--prof_warn NUMBER]
-                     [--prof_crit NUMBER] [--block_reward NUMBER]
-                     [--mining_fee_reward NUMBER] [--pool_fee NUMBER]
+                     [--hash_maximum NUMBER]
+                     [-i|--hash_percent_below_ideal_warn NUMBER]
+                     [-I|--hash_percent_below_ideal_crit NUMBER]
+                     [--hashunit STRING] [-f|--fan_low_warn NUMBER]
+                     [-F|--fan_low_crit NUMBER] [-n|--fan_high_warn NUMBER]
+                     [-N|--fan_high_crit NUMBER] [--volt_high_warn NUMBER]
+                     [--volt_high_crit NUMBER] [--freq_high_warn NUMBER]
+                     [--freq_high_crit NUMBER] [-d|--dynamic_power]
+                     [--device_power NUMBER] [--electric_rate NUMBER]
+                     [--prof_warn NUMBER] [--prof_crit NUMBER]
+                     [--block_reward NUMBER] [--mining_fee_reward NUMBER]
+                     [--pool_fee NUMBER]
   Return Nagios formatted string based on cgminer API returned values
 
 Available options:
@@ -50,6 +53,12 @@ Available options:
   -R,--hash_crit NUMBER    Critical hash rate threshold (default: 3000.0)
   --hash_maximum NUMBER    Maximum Hashrate (Used with performance
                            data) (default: 10000.0)
+  -i,--hash_percent_below_ideal_warn NUMBER
+                           Warning hash percent below ideal hash rate
+                           threshold (default: 0.95)
+  -I,--hash_percent_below_ideal_crit NUMBER
+                           Critical hash percent below ideal hash rate
+                           threshold (default: 0.5)
   --hashunit STRING        Hashing unit of measure (default: "Ghs")
   -f,--fan_low_warn NUMBER Warning low fan speed threshold in
                            RPMs (default: 999.0)
@@ -69,7 +78,7 @@ Available options:
                            supported for S9 miners) (default: 5000.0)
   --freq_high_crit NUMBER  Critical high frequency threshold in Mhz (Only
                            supported for S9 miners) (default: 5000.0)
-  -d,--dynamic_power       Enable dynmaic power strategy calculation (Only
+  -d,--dynamic_power       Enable dynamic power strategy calculation (Only
                            supported for S17 miners)
   --device_power NUMBER    Override estimated device power consumption in Watt
   --electric_rate NUMBER   Default electricity rate in USD/kWh (default: 0.1188)
