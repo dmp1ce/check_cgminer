@@ -47,6 +47,9 @@ data Stats = Stats { device :: Maybe MiningDevice
                    , power :: Maybe Power
                    , tempuratures :: TextRationalPairs
                    , hashrates :: TextRationalPairs
+                   , hashratesIdeal :: TextRationalPairs
+                   , hashrateIdealTotal :: Maybe Rational
+                   , hashratesIdealPercentage :: Maybe Rational
                    , fanspeeds :: TextRationalPairs
                    , voltages    :: TextRationalPairs
                    , frequencies :: TextRationalPairs
@@ -85,7 +88,7 @@ getSummary reply = flip parseEither reply $ \r -> do
   temps <- parseTextListToRational ["Temperature"] rawStats
   fans <- parseTextListToRational ["Fan Speed In","Fan Speed Out"] rawStats
   hrates <- parseTextListToRational ["MHS 5s"] rawStats
-  return $ Stats Nothing Nothing temps hrates fans [] [] Nothing
+  return $ Stats Nothing Nothing temps hrates [] Nothing Nothing fans [] [] Nothing
 
 
 -- | Parse `Stats` from STATS section of reply
@@ -116,65 +119,96 @@ getStats reply = flip parseEither reply $ \r -> do
     -- Matches S9 miner case
     Nothing -> parseS9Stats AntminerS9 rawStats
   where
-    parseS9kStats = parseDR5Stats
-    parseS9seStats = parseDR5Stats
+    parseStringRange :: Object -> Text -> [Int] -> Parser TextRationalPairs
+    parseStringRange rawStats s range =
+      parseTextListToRational (T.append s . T.pack . show <$> range) rawStats
+    parseHashRatesAndIdeal :: Object -> [Int] -> Parser (TextRationalPairs, TextRationalPairs, Rational)
+    parseHashRatesAndIdeal rawStats chainRateNums = do
+      hrates <- parseStringRange rawStats "chain_rate" chainRateNums
+      idealrates <- parseStringRange rawStats "chain_rateideal" chainRateNums
+      idealrateTotal <- expectRational <$> rawStats .: "total_rateideal"
+      return (hrates, idealrates, idealrateTotal)
+
+    parseS9seStats = parseS9kStats
+    parseS9kStats d rawStats = do
+      temps <- parseTextListToRational ["temp1","temp2","temp3"
+                                       ,"temp2_1","temp2_2","temp2_3"] rawStats
+      fans <- parseTextListToRational ["fan1","fan2"] rawStats
+      (hrates,idealrates, idealrateTotal) <- parseHashRatesAndIdeal rawStats [1,2,3]
+      return $ Stats (Just d) Nothing temps hrates idealrates (Just idealrateTotal) Nothing fans [] [] Nothing
     parseZ9miniStats d rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1"] rawStats
-      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ Stats (Just d) Nothing temps hrates fans [] [] Nothing
+      hrates <- parseStringRange rawStats "chain_rate" [1,2,3]
+      return $ Stats (Just d) Nothing temps hrates [] Nothing Nothing fans [] [] Nothing
     parseDR5Stats d rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
-      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return $ Stats (Just d) Nothing temps hrates fans [] [] Nothing
+      hrates <- parseStringRange rawStats "chain_rate" [1,2,3]
+      return $ Stats (Just d) Nothing temps hrates [] Nothing Nothing fans [] [] Nothing
     parseS15Stats d rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3","temp4"
                                        ,"temp2_1","temp2_2","temp2_3","temp2_4"
                                        ,"temp3_1","temp3_2","temp3_3","temp3_4"] rawStats
       fans <- parseTextListToRational ["fan1","fan2"] rawStats
-      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3","chain_rate4"] rawStats
-      return $ Stats (Just d) Nothing temps hrates fans [] [] Nothing
+      (hrates,idealrates, idealrateTotal) <- parseHashRatesAndIdeal rawStats [1,2,3,4]
+      return $ Stats (Just d) Nothing temps hrates idealrates (Just idealrateTotal) Nothing fans [] [] Nothing
     parseS17Stats d rawStats = do
-      (temps, fans, hrates) <- s17ParseStats' rawStats
+      (temps, fans, hrates, idealrates, idealrateTotal) <- s17ParseStats' rawStats
       mode <- parseWorkMode rawStats
-      return $ Stats (Just d) Nothing temps hrates fans [] [] mode
+      return $ Stats (Just d) Nothing temps hrates idealrates (Just idealrateTotal) Nothing fans [] [] mode
     parseS17VnishStats d rawStats = do
-      (temps, fans, hrates) <- s17ParseStats' rawStats
-      return $ Stats (Just d) Nothing temps hrates fans [] [] Nothing
+      (temps, fans, hrates, idealrates, idealrateTotal) <- s17ParseStats' rawStats
+      return $ Stats (Just d) Nothing temps hrates idealrates (Just idealrateTotal) Nothing fans [] [] Nothing
     parseS9Stats d rawStats = do
       temps <- parseTextListToRational ["temp6","temp2_6","temp7","temp2_7","temp8","temp2_8"] rawStats
       fans <- parseTextListToRational ["fan5","fan6"] rawStats
-      hrates <- parseTextListToRational ["chain_rate6","chain_rate7","chain_rate8"] rawStats
+      (hrates,idealrates, idealrateTotal) <- parseHashRatesAndIdeal rawStats [6,7,8]
       volts <- parseTextListToRational ["voltage6","voltage7","voltage8"] rawStats
       freqs <- parseTextListToRational ["freq_avg6","freq_avg7","freq_avg8"] rawStats
-      return $ Stats (Just d) Nothing temps hrates fans volts freqs Nothing
+      return $ Stats (Just d) Nothing temps hrates idealrates (Just idealrateTotal) Nothing fans volts freqs Nothing
     s17ParseStats' rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"
                                        ,"temp3_1","temp3_2","temp3_3"] rawStats
       fans <- parseTextListToRational ["fan1","fan2","fan3","fan4"] rawStats
-      hrates <- parseTextListToRational ["chain_rate1","chain_rate2","chain_rate3"] rawStats
-      return (temps,fans,hrates)
+      (hrates,idealrates, idealrateTotal) <- parseHashRatesAndIdeal rawStats [1,2,3]
+      return (temps,fans,hrates,idealrates,idealrateTotal)
 
 -- | Update Stats with power consumption.
 --   The power consumption can be calculated as a constant or dynamic power
 --   Dynamic power is based off of hash rate
 --   If the power cannot be calculated then nothing is changed in the statistics.
 includePowerConsumption :: PowerStrategy -> Stats -> Stats
-includePowerConsumption DynamicPower s@(Stats (Just AntminerS17Pro) _ _ h _ _ _ _) =
+includePowerConsumption DynamicPower s@(Stats (Just AntminerS17Pro) _ _ h _ _ _ _ _ _ _) =
   -- 45W per TH
   s {power = Just $ Watt $ sum (snd <$> h) * 0.045}
-includePowerConsumption ConstantPower s@(Stats (Just d) _ _ _ _ _ _ m) =
+includePowerConsumption ConstantPower s@(Stats (Just d) _ _ _ _ _ _ _ _ _ m) =
   s {power = eitherToMaybe $ miningDevicePowerConsumption d m}
   where
     eitherToMaybe :: Either a b -> Maybe b
     eitherToMaybe (Right b) = Just b
     eitherToMaybe (Left _) = Nothing
-includePowerConsumption _ s@(Stats (Just _) _ _ _ _ _ _ _) = s
-includePowerConsumption _ s@(Stats Nothing _ _ _ _ _ _ _) = s
+includePowerConsumption _ s@(Stats (Just _) _ _ _ _ _ _ _ _ _ _) = s
+includePowerConsumption _ s@(Stats Nothing _ _ _ _ _ _ _ _ _ _) = s
+
+includeIdealPercentage :: Stats -> Stats
+includeIdealPercentage s = s {hashratesIdealPercentage = calcIdealPercentage s}
+
+-- Try to get the percentage of the ideal rate based on the current hash rate
+calcIdealPercentage :: Stats -> Maybe Rational
+calcIdealPercentage (Stats _ _ _ hr hri hriTotal _ _ _ _ _) =
+  -- Make sure an ideal hashrate exists to avoid division error
+  let is = sum (snd <$> hri)
+      isValid = is > 0
+      hs = sum (snd <$> hr)
+  in if isValid
+        then Just $ hs / is
+        else if ((> 0) <$> hriTotal) == Just True
+                then (hs /) <$> hriTotal
+                else Nothing
 
 -- We really want a rational from the data so make it happen here.
 expectRational :: Value -> Rational

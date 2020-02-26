@@ -8,13 +8,14 @@ import Test.Tasty ( defaultMain, TestTree, testGroup )
 import Test.Tasty.HUnit ( testCase, (@?=), (@?), assertBool )
 
 import Data.Maybe (isJust)
+import Data.Ratio ((%))
 import Data.ByteString.Lazy (ByteString)
 import Data.Aeson (encode)
 import qualified Data.Serialize as S
 import qualified Data.Time.Clock as C
 
 import CgminerApi ( QueryApi (QueryApi), decodeReply, getStats, getSummary, Stats (Stats), replace
-                  , includePowerConsumption, PowerStrategy (..) )
+                  , includePowerConsumption, calcIdealPercentage, includeIdealPercentage, PowerStrategy (..) )
 import CheckCgminer (anyTempsAreZero, anyAboveThreshold, anyBelowThreshold)
 import qualified Data.Text as T
 
@@ -36,7 +37,7 @@ json = testGroup "json tests"
     isJust (decodeReply exampleReplyS9BraiinsOS) @? "exampleReply could not be decoded"
   , testCase "Can get stats (braiinsOS s9)" $
       let Just x = decodeReply exampleReplyS9BraiinsOS
-      in (includePowerConsumption ConstantPower <$> getStats x)
+      in (includeIdealPercentage . includePowerConsumption ConstantPower <$> getStats x)
          @?= Right ( Stats (Just AntminerS9) (Just $ Watt 1323)
                            [ ("temp6"::T.Text, 59::Rational)
                            , ("temp2_6"::T.Text, 75)
@@ -49,6 +50,12 @@ json = testGroup "json tests"
                            , ("chain_rate7",4679.16)
                            , ("chain_rate8",4550.58)
                            ]
+                           [ ("chain_rateideal6",4525.53)
+                           , ("chain_rateideal7",4699.58)
+                           , ("chain_rateideal8",4530.58)
+                           ]
+                           (Just 13755.69)
+                           (Just $ 1375402 % 1375569) -- 99.987859569 %
                            [ ("fan5",5040)
                            , ("fan6",3600)
                            ]
@@ -66,7 +73,7 @@ json = testGroup "json tests"
     isJust (decodeReply exampleReplyZ9mini) @? "exampleReply could not be decoded"
   , testCase "Can get stats (Z9-mini)" $
       let Just x = decodeReply exampleReplyZ9mini
-      in (includePowerConsumption ConstantPower <$> getStats x)
+      in (includeIdealPercentage . includePowerConsumption ConstantPower <$> getStats x)
          @?= Right ( Stats (Just AntminerZ9Mini) Nothing
                            [ ("temp1"::T.Text, 54::Rational)
                            , ("temp2"::T.Text, 53)
@@ -79,6 +86,9 @@ json = testGroup "json tests"
                            , ("chain_rate2",5.14)
                            , ("chain_rate3",5.61)
                            ]
+                           []
+                           Nothing
+                           Nothing
                            [ ("fan1",4200)]
                            []
                            []
@@ -88,7 +98,7 @@ json = testGroup "json tests"
     isJust (decodeReply exampleReplyS9k) @? "exampleReply could not be decoded"
   , testCase "Can get stats (S9k)" $
       let Just x = decodeReply exampleReplyS9k
-      in (includePowerConsumption ConstantPower <$> getStats x)
+      in (includeIdealPercentage . includePowerConsumption ConstantPower <$> getStats x)
          @?= Right ( Stats (Just AntminerS9k) Nothing
                            [ ("temp1"::T.Text, 63::Rational)
                            , ("temp2"::T.Text, 62)
@@ -101,6 +111,12 @@ json = testGroup "json tests"
                            , ("chain_rate2",4529.85)
                            , ("chain_rate3",4090.06)
                            ]
+                           [ ("chain_rateideal1",0)
+                           , ("chain_rateideal2",0)
+                           , ("chain_rateideal3",0)
+                           ]
+                           (Just 14000)
+                           (Just $ 20306 % 21875) -- 92.827428571 %
                            [ ("fan1",6480)
                            , ("fan2",6480)]
                            []
@@ -111,7 +127,7 @@ json = testGroup "json tests"
     isJust (decodeReply exampleReplyS9se) @? "exampleReply could not be decoded"
   , testCase "Can get stats (S9se)" $
       let Just x = decodeReply exampleReplyS9se
-      in (includePowerConsumption ConstantPower <$> getStats x)
+      in (includeIdealPercentage . includePowerConsumption ConstantPower <$> getStats x)
          @?= Right ( Stats (Just AntminerS9SE) (Just $ Watt 1280)
                            [ ("temp1"::T.Text, 60::Rational)
                            , ("temp2"::T.Text, 61)
@@ -124,6 +140,12 @@ json = testGroup "json tests"
                            , ("chain_rate2",5057.61)
                            , ("chain_rate3",5475.41)
                            ]
+                           [ ("chain_rateideal1",0)
+                           , ("chain_rateideal2",0)
+                           , ("chain_rateideal3",0)
+                           ]
+                           (Just 16000)
+                           (Just $ 78283 % 80000) -- 97.85375 %
                            [ ("fan1",1920)
                            , ("fan2",1920)]
                            []
@@ -134,7 +156,7 @@ json = testGroup "json tests"
     isJust (decodeReply exampleReplyDR5) @? "exampleReply could not be decoded"
   , testCase "Can get stats (DR5)" $
       let Just x = decodeReply exampleReplyDR5
-      in (includePowerConsumption ConstantPower <$> getStats x)
+      in (includeIdealPercentage . includePowerConsumption ConstantPower <$> getStats x)
          @?= Right ( Stats (Just AntminerDR5) Nothing
                            [ ("temp1"::T.Text, 62::Rational)
                            , ("temp2"::T.Text, 66)
@@ -147,6 +169,9 @@ json = testGroup "json tests"
                            , ("chain_rate2",11956.85)
                            , ("chain_rate3",12033.82)
                            ]
+                           []
+                           Nothing
+                           Nothing
                            [ ("fan1",3600)
                            , ("fan2",3600)
                            ][][] Nothing
@@ -155,7 +180,7 @@ json = testGroup "json tests"
     isJust (decodeReply exampleReplyS15) @? "exampleReply could not be decoded"
   , testCase "Can get stats (stock s15)" $
       let Just x = decodeReply exampleReplyS15
-      in (includePowerConsumption ConstantPower <$> getStats x)
+      in (includeIdealPercentage . includePowerConsumption ConstantPower <$> getStats x)
          @?= Right ( Stats (Just AntminerS15) (Just $ Watt 1596)
                            [ ("temp1"::T.Text, 60::Rational)
                            , ("temp2"::T.Text, 65)
@@ -175,6 +200,13 @@ json = testGroup "json tests"
                            , ("chain_rate3",6860.75)
                            , ("chain_rate4",7366.51)
                            ]
+                           [ ("chain_rateideal1",0)
+                           , ("chain_rateideal2",0)
+                           , ("chain_rateideal3",0)
+                           , ("chain_rateideal4",0)
+                           ]
+                           (Just 28000)
+                           (Just $ 711363 % 700000) -- 101.623285714 %
                            [ ("fan1",4080)
                            , ("fan2",4200)
                            ][][] Nothing
@@ -183,7 +215,7 @@ json = testGroup "json tests"
     isJust (decodeReply exampleReplyS17Pro) @? "exampleReply could not be decoded"
   , testCase "Can get stats (stock s17)" $
       let Just x = decodeReply exampleReplyS17Pro
-      in (includePowerConsumption ConstantPower <$> getStats x)
+      in (includeIdealPercentage . includePowerConsumption ConstantPower <$> getStats x)
          @?= Right ( Stats (Just AntminerS17Pro) (Just $ Watt 2094)
                            [ ("temp1"::T.Text, 63::Rational)
                            , ("temp2"::T.Text, 63)
@@ -199,6 +231,12 @@ json = testGroup "json tests"
                            , ("chain_rate2",16954.05)
                            , ("chain_rate3",16514.26)
                            ]
+                           [ ("chain_rateideal1",16911)
+                           , ("chain_rateideal2",16911)
+                           , ("chain_rateideal3",16911)
+                           ]
+                           (Just 50000)
+                           (Just $ 1000531 % 1014660) -- 98.607513847%
                            [ ("fan1",2760)
                            , ("fan2",2760)
                            , ("fan3",3720)
@@ -209,7 +247,7 @@ json = testGroup "json tests"
     isJust (decodeReply exampleReplyS17Vnish) @? "exampleReply could not be decoded"
   , testCase "Can get stats (s17 vnish)" $
       let Just x = decodeReply exampleReplyS17Vnish
-      in (includePowerConsumption ConstantPower <$> getStats x)
+      in (includeIdealPercentage . includePowerConsumption ConstantPower <$> getStats x)
          @?= Right ( Stats (Just AntminerS17Vnish) (Just $ Watt 2800)
                            [ ("temp1"::T.Text, 55::Rational)
                            , ("temp2"::T.Text, 57)
@@ -225,6 +263,12 @@ json = testGroup "json tests"
                            , ("chain_rate2",21759.19)
                            , ("chain_rate3",21635.21)
                            ]
+                           [ ("chain_rateideal1",21744)
+                           , ("chain_rateideal2",21744)
+                           , ("chain_rateideal3",21744)
+                           ]
+                           (Just 65232)
+                           (Just $ 1628999 % 1630800) -- 99.889563404 %
                            [ ("fan1",0)
                            , ("fan2",0)
                            , ("fan3",0)
@@ -235,10 +279,11 @@ json = testGroup "json tests"
     isJust (decodeReply exampleReplyWhatsminer) @? "exampleReply could not be decoded"
   , testCase "Can get stats (whatsminer)" $
       let Just x = decodeReply exampleReplyWhatsminer
-      in (includePowerConsumption ConstantPower <$> getSummary x)
+      in (includeIdealPercentage . includePowerConsumption ConstantPower <$> getSummary x)
          @?= Right ( Stats Nothing Nothing
                            [ ("Temperature"::T.Text, 75.00::Rational)]
-                           [ ("MHS 5s",35523530.10)]
+                           [ ("MHS 5s",35523530.10)] []
+                           Nothing Nothing
                            [ ("Fan Speed In",6360)
                            , ("Fan Speed Out",6390)
                            ][][] Nothing
@@ -288,10 +333,26 @@ misc = testGroup "Other testable functionality"
   , testCase "Revenue is positive" $
     let Rate USD Second x = revenueRate (Ghs [1]) (Difficulty 20000) (Bitcoins Bitcoin 25) (Bitcoins Bitcoin 0) (Price USD 10000)
     in x >= 0 @? "Revenue is less than 0"
-  , testCase "includePowerConsumption simple case" $
-    let s = Stats (Just AntminerS17Pro) Nothing [] [("",500),("",500)] [] [] [] Nothing
+  , testCase "includePowerConsumption - simple case" $
+    let s = Stats (Just AntminerS17Pro) Nothing [] [("",500),("",500)] [] Nothing Nothing [] [] [] Nothing
     in includePowerConsumption DynamicPower s @?= Stats (Just AntminerS17Pro) (Just (Watt 45)) []
-       [("",500), ("",500)] [] [] [] Nothing
+       [("",500), ("",500)] [] Nothing Nothing [] [] [] Nothing
+  , testCase "calcIdealDifference - simple case" $
+    let s = Stats (Just AntminerS17Pro) Nothing [] [("",500),("",500)] [("",1000),("",1000)] Nothing Nothing [] [] []  Nothing
+    in calcIdealPercentage s @?= Just 0.5
+  , testCase "calcIdealDifference - total ideal" $
+    let s = Stats (Just AntminerS17Pro) Nothing [] [("",500),("",500)] [] (Just 2000) Nothing [] [] []  Nothing
+    in calcIdealPercentage s @?= Just 0.5
+
+  , testCase "calcIdealDifference - invalid case #1" $
+    let s = Stats (Just AntminerS17Pro) Nothing [] [("",500),("",500)] [] Nothing Nothing [] [] []  Nothing
+    in calcIdealPercentage s @?= Nothing
+  , testCase "calcIdealDifference - invalid case #2" $
+    let s = Stats (Just AntminerS17Pro) Nothing [] [("",500),("",500)] [("",0)] Nothing Nothing [] [] []  Nothing
+    in calcIdealPercentage s @?= Nothing
+  , testCase "calcIdealDifference - invalid case #3" $
+    let s = Stats (Just AntminerS17Pro) Nothing [] [("",500),("",500)] [("",0)] (Just 0) Nothing [] [] []  Nothing
+    in calcIdealPercentage s @?= Nothing
     ]
 
 cache :: TestTree

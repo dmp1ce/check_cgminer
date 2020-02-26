@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.7.7.0
+
+- Add ideal hashrate percentage checks and performance data
+
 ## 0.7.6.0
 
 - Add dynamic power calculation strategy when calculating profitability

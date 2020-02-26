@@ -31,7 +31,8 @@ import Text.Printf (printf)
 import Control.Exception (catches, IOException, SomeException, Handler (Handler))
 
 import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats)
-                  , TextRationalPairs, ReplyApi, includePowerConsumption, PowerStrategy (DynamicPower, ConstantPower))
+                  , TextRationalPairs, ReplyApi, includePowerConsumption, includeIdealPercentage
+                  , PowerStrategy (DynamicPower, ConstantPower))
 import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins (Bitcoins), BitcoinUnit (Bitcoin)
              , Difficulty, EnergyRate (EnergyRate), EnergyUnit (KiloWattHour), MonetaryUnit (USD)
              , Price, cacheIO, getBitcoinDifficultyAndReward, WorkMode (WorkMode), getBitcoinPrice, Rate (Rate)
@@ -45,6 +46,8 @@ data CliOptions = CliOptions
   , hashrate_warning :: Double
   , hashrate_critical :: Double
   , hashrate_maximum :: Double
+  , hashrate_below_ideal_warning :: Double
+  , hashrate_below_ideal_critial :: Double
   , hash_unit :: String
   , fanspeed_low_warning :: Double
   , fanspeed_low_critical :: Double
@@ -72,6 +75,10 @@ defaultHashRateWarningThreshold :: Double
 defaultHashRateWarningThreshold = 4000
 defaultHashRateCriticalThreshold :: Double
 defaultHashRateCriticalThreshold = 3000
+defaultHashRatePercentBelowIdealWarningThreshold :: Double
+defaultHashRatePercentBelowIdealWarningThreshold = 0.95
+defaultHashRatePercentBelowIdealCriticalThreshold :: Double
+defaultHashRatePercentBelowIdealCriticalThreshold = 0.5
 defaultHashUnit :: String
 defaultHashUnit = "Ghs"
 defaultFanSpeedLowWarningThreshold :: Double
@@ -154,6 +161,22 @@ cliOptions = CliOptions
      <> metavar "NUMBER"
      <> value defaultMaximumHashRateThreshold
      <> help "Maximum Hashrate (Used with performance data)"
+     <> showDefault
+      )
+  <*> option auto
+      ( long "hash_percent_below_ideal_warn"
+     <> short 'i'
+     <> metavar "NUMBER"
+     <> value defaultHashRatePercentBelowIdealWarningThreshold
+     <> help "Warning hash percent below ideal hash rate threshold"
+     <> showDefault
+      )
+  <*> option auto
+      ( long "hash_percent_below_ideal_crit"
+     <> short 'I'
+     <> metavar "NUMBER"
+     <> value defaultHashRatePercentBelowIdealCriticalThreshold
+     <> help "Critical hash percent below ideal hash rate threshold"
      <> showDefault
       )
   <*> option str
@@ -300,11 +323,12 @@ maximumFreqThreshold = 5000
 minimumFreqThreshold :: Double
 minimumFreqThreshold = 0
 
-data Thresholds = Thresholds TempThresholds HashThresholds FanThresholds VoltageThresholds
-                  FrequencyThresholds ProfitabilityThresholds
+data Thresholds = Thresholds TempThresholds HashThresholds HashIdealRatioThresholds
+                  FanThresholds VoltageThresholds FrequencyThresholds ProfitabilityThresholds
 data TempThresholds = TempThresholds HighWarning HighCritical
 data FanThresholds = FanThresholds LowWarning LowCritical HighWarning HighCritical
 data HashThresholds = HashThresholds LowWarning LowCritical Maximum
+data HashIdealRatioThresholds = HashIdealRatioThresholds LowWarning LowCritical
 data VoltageThresholds = VoltageThresholds HighWarning HighCritical
 data FrequencyThresholds = FrequencyThresholds HighWarning HighCritical
 data ProfitabilityThresholds = ProfitabilityThresholds LowWarning LowCritical
@@ -320,11 +344,13 @@ checkStats :: Stats
            -> Thresholds
            -> String -- | Hashing unit
            -> NagiosPlugin ()
-checkStats (Stats _ mpc temps hashrates fanspeeds voltages frequencies workMode)
+checkStats (Stats _ mpc temps hashrates _ _ hashratesIdealRatioM
+            fanspeeds voltages frequencies workMode)
            pfs
            (Thresholds
               (TempThresholds (HighWarning tw) (HighCritical tc))
               (HashThresholds (LowWarning hw) (LowCritical hc) (Maximum hmax))
+              (HashIdealRatioThresholds (LowWarning hirw) (LowCritical hirc))
               (FanThresholds (LowWarning flw) (LowCritical flc)
                (HighWarning fhw) (HighCritical fhc))
               (VoltageThresholds (HighWarning vhw) (HighCritical vhc))
@@ -340,6 +366,13 @@ checkStats (Stats _ mpc temps hashrates fanspeeds voltages frequencies workMode)
 
   addResultIf anyBelowThreshold hashrates hc Critical "Hashrates below critical threshold of " $ T.pack hu
   addResultIf anyBelowThreshold hashrates hw Warning "Hashrates below warning threshold of " $ T.pack hu
+
+  maybe (return ()) (\hashratesIdealRatio -> do
+    addResultIf anyBelowThreshold [("", hashratesIdealRatio*100)] (hirc*100)
+      Critical "Hashrate Ideal ratio below critcal threshold of " "%"
+    addResultIf anyBelowThreshold [("", hashratesIdealRatio*100)] (hirw*100)
+      Warning "Hashrate Ideal ratio below warning threshold of " "%"
+    ) hashratesIdealRatioM
 
   addResultIf anyBelowThreshold fanspeeds flc Critical "Fan speed below critical threshold of " "RPM"
   addResultIf anyBelowThreshold fanspeeds flw Warning "Fan speed below warning threshold of " "RPM"
@@ -371,6 +404,7 @@ checkStats (Stats _ mpc temps hashrates fanspeeds voltages frequencies workMode)
   -- Output performance data
   mapMPerfData addTempData temps
   mapMPerfData addHashData hashrates
+  maybe (return ()) (\ir -> addPerfData' "IdealRatio" ir 0 1.5 hirw hirc) hashratesIdealRatioM
   mapMPerfData addFanData fanspeeds
   mapMPerfData addVoltData voltages
   mapMPerfData addFreqData frequencies
@@ -431,7 +465,7 @@ instance ToPerfData PerfDataWorkMode where
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
-tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   r <- catches (sendCGMinerCommand h p c)
        [ Handler (\(e :: IOException) ->
                     error $ "IOException while sending '" ++ T.unpack c ++ "' command: " ++ show e
@@ -464,7 +498,7 @@ trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
 execCheck :: CliOptions -> IO ()
-execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqhw
+execCheck opts@(CliOptions _ _ tw tc hw hc hmax hirw hirc hu flw flc fhw fhc vhw vhc freqhw
                 freqhc ps mpc erd profw profc mbr mmfr pfp) = do
   -- Try to get "stats" command first
   eStats <- tryStats opts
@@ -483,7 +517,7 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
         Left _ -> return ()
         Right stats -> do
           pf <- getProfitabilityFactors
-          runNagiosPlugin $ checkStats (includePowerConsumption ps stats) pf thresholds hu
+          runNagiosPlugin $ checkStats ((includeIdealPercentage. includePowerConsumption ps) stats) pf thresholds hu
 
     getProfitabilityFactors :: IO (Maybe ProfitabilityFactors)
     getProfitabilityFactors = do
@@ -497,6 +531,7 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hu flw flc fhw fhc vhw vhc freqh
     appRat v = approxRational v 0.0001
     thresholds = Thresholds (TempThresholds (HighWarning (appRat tw)) (HighCritical (appRat tc)))
                  (HashThresholds (LowWarning (appRat hw)) (LowCritical (appRat hc)) (Maximum hmax))
+                 (HashIdealRatioThresholds (LowWarning (appRat hirw)) (LowCritical (appRat hirc)))
                  (FanThresholds (LowWarning (appRat flw)) (LowCritical (appRat flc))
                                 (HighWarning (appRat fhw)) (HighCritical (appRat fhc)))
                  (VoltageThresholds (HighWarning $ appRat vhw) (HighCritical $ appRat vhc))
