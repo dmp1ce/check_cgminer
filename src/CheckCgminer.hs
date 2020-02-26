@@ -78,7 +78,7 @@ defaultHashRateCriticalThreshold = 3000
 defaultHashRatePercentBelowIdealWarningThreshold :: Double
 defaultHashRatePercentBelowIdealWarningThreshold = 0.95
 defaultHashRatePercentBelowIdealCriticalThreshold :: Double
-defaultHashRatePercentBelowIdealCriticalThreshold = 0.5
+defaultHashRatePercentBelowIdealCriticalThreshold = 0.8
 defaultHashUnit :: String
 defaultHashUnit = "Ghs"
 defaultFanSpeedLowWarningThreshold :: Double
