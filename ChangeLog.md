@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.7.8.0
+
+- Remove dependency on BitcoinChain.com in favor of blockchain.info for difficulty and reward data
+
 ## 0.7.7.0
 
 - Add ideal hashrate percentage checks and performance data

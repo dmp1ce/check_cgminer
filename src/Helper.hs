@@ -17,6 +17,7 @@ import System.FilePath ((</>))
 import qualified Data.ByteString as B
 import qualified Data.Time.Clock as C
 import GHC.Generics (Generic)
+import Data.String.Conversions (cs)
 
 -- Units
 data BitcoinUnit = Bitcoin deriving (Show, Generic)
@@ -117,9 +118,34 @@ getBitcoinPrice = do
     Just r' -> return $ Just (Price USD r')
     _ -> return Nothing
 
+-- Difficulty
+getBitcoinDifficulty :: IO (Maybe Difficulty)
+getBitcoinDifficulty = do
+  r <- W.get "https://blockchain.info/q/getdifficulty"
+  d <- case rational . cs <$> r ^? W.responseBody of
+         Just (Right (r',_)) -> return $ Just $ Difficulty r'
+         _ -> return Nothing
+  return d
+
+-- Reward
+getBitcoinReward :: IO (Maybe Bitcoins)
+getBitcoinReward = do
+  r <- W.get "https://blockchain.info/q/bcperblock"
+  d <- case rational . cs <$> r ^? W.responseBody of
+         Just (Right (r',_)) -> return $ Just $ Bitcoins Bitcoin r'
+         _ -> return Nothing
+  return d
+
 -- Difficulty and Block Reward
 getBitcoinDifficultyAndReward :: IO (Maybe (Difficulty, Bitcoins))
 getBitcoinDifficultyAndReward = do
+  d <- getBitcoinDifficulty
+  r <- getBitcoinReward
+  return $ (,) <$> d <*> r
+
+ -- Archived and original Difficulty and Block Reward API call
+getBitcoinDifficultyAndRewardFromBitcoinChain :: IO (Maybe (Difficulty, Bitcoins))
+getBitcoinDifficultyAndRewardFromBitcoinChain = do
   r <- W.get "https://api-r.bitcoinchain.com/v1/status"
   d <- case rational <$> r ^? W.responseBody . key "difficulty" . _String of
          Just (Right (r',_)) -> return $ Just $ Difficulty r'

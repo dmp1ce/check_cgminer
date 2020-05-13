@@ -1,5 +1,5 @@
 name:                check-cgminer
-version:             0.7.7.0
+version:             0.7.8.0
 github:              "dmp1ce/check_cgminer"
 license:             PublicDomain
 author:              "David Parrish"
@@ -37,6 +37,7 @@ dependencies:
 - directory
 - filepath
 - time
+- string-conversions
 
 default-extensions:
   - OverloadedStrings
