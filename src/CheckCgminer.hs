@@ -246,15 +246,15 @@ cliOptions = CliOptions
      <> help "Critical high frequency threshold in Mhz (Only supported for S9 miners)"
      <> showDefault
       )
-   <*> flag ConstantPower DynamicPower
+   <*> flag (ConstantPower Nothing) (DynamicPower Nothing)
       ( long "dynamic_power"
      <> short 'd'
-     <> help "Enable dynamic power strategy calculation (Only supported for S17 miners)"
+     <> help "Enable dynamic power strategy calculation (Only supported for S17 miners, unless --device_power is also supplied.)"
       )
    <*> optional (option auto
       ( long "device_power"
      <> metavar "NUMBER"
-     <> help "Override estimated device power consumption in Watt"
+     <> help "Override estimated device power consumption in Watt. When used with dynamic power flag, Watts per Gigahash is assumed."
       ))
    <*> option auto
       ( long "electric_rate"
@@ -337,7 +337,7 @@ newtype HighCritical = HighCritical Rational
 newtype LowWarning = LowWarning Rational
 newtype LowCritical = LowCritical Rational
 newtype Maximum = Maximum Double
-data ProfitabilityFactors = ProfitabilityFactors (Maybe Double) EnergyRate Difficulty Price Bitcoins Bitcoins Rational
+data ProfitabilityFactors = ProfitabilityFactors EnergyRate Difficulty Price Bitcoins Bitcoins Rational
 
 checkStats :: Stats
            -> Maybe ProfitabilityFactors
@@ -389,9 +389,8 @@ checkStats (Stats _ mpc temps hashrates _ _ hashratesIdealRatioM
   -- https://bitcoin.stackexchange.com/questions/8568/equation-for-mining-profit
   -- TODO: Probably can use Maybe applicative to simplify this code.
   case pfs of
-    Just (ProfitabilityFactors mpcOverride electricityRate difficulty price blockReward miningFeeReward poolFee) -> do
-      let mPowerConsumption = maybe mpc (Just . Watt . toRational) mpcOverride -- Watt 300
-          mProfitability = case mPowerConsumption of
+    Just (ProfitabilityFactors electricityRate difficulty price blockReward miningFeeReward poolFee) -> do
+      let mProfitability = case mpc of
                             Just power -> Just $ getProfitability (Ghs (snd <$> hashrates)) difficulty
                                           blockReward miningFeeReward power electricityRate price poolFee
                             Nothing -> Nothing
@@ -517,7 +516,11 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hirw hirc hu flw flc fhw fhc vhw
         Left _ -> return ()
         Right stats -> do
           pf <- getProfitabilityFactors
-          runNagiosPlugin $ checkStats ((includeIdealPercentage. includePowerConsumption ps) stats) pf thresholds hu
+          let ps' = maybe ps (\d -> case ps of
+                                 ConstantPower _ -> ConstantPower $ Just $ Watt $ toRational d
+                                 DynamicPower _ -> DynamicPower $ Just $ Watt $ toRational d
+                             ) mpc
+          runNagiosPlugin $ checkStats ((includeIdealPercentage . includePowerConsumption ps') stats) pf thresholds hu
 
     getProfitabilityFactors :: IO (Maybe ProfitabilityFactors)
     getProfitabilityFactors = do
@@ -525,7 +528,7 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hirw hirc hu flw flc fhw fhc vhw
       mr <- cacheIO "minerFeeRewardCache" nominalDay getBitcoinAverageMiningFeeReward
       p <- cacheIO "priceCache" nominalDay getBitcoinPrice
       let er = EnergyRate USD KiloWattHour (toRational erd)
-      return $ ProfitabilityFactors mpc er <$> (fst <$> dNr) <*> p
+      return $ ProfitabilityFactors er <$> (fst <$> dNr) <*> p
         <*> maybe (snd <$> dNr) (\d -> Just (Bitcoins Bitcoin $ toRational d)) mbr
         <*> maybe mr (\d -> Just (Bitcoins Bitcoin $ toRational d)) mmfr <*> Just (toRational pfp)
     appRat v = approxRational v 0.0001

@@ -41,7 +41,10 @@ instance FromJSON ReplyApi where
     <*> (v .:? "STATS")
     <*> (v .:? "SUMMARY")
 
-data PowerStrategy = ConstantPower | DynamicPower
+data PowerStrategy = ConstantPower (Maybe Power)
+                   -- | Watt per Gigahash
+                   | DynamicPower (Maybe Power)
+  deriving Show
 
 data Stats = Stats { device :: Maybe MiningDevice
                    , power :: Maybe Power
@@ -182,17 +185,23 @@ getStats reply = flip parseEither reply $ \r -> do
 --   Dynamic power is based off of hash rate
 --   If the power cannot be calculated then nothing is changed in the statistics.
 includePowerConsumption :: PowerStrategy -> Stats -> Stats
-includePowerConsumption DynamicPower s@(Stats (Just AntminerS17Pro) _ _ h _ _ _ _ _ _ _) =
+includePowerConsumption ps s = s {power = getPowerConsumption ps s}
+
+getPowerConsumption :: PowerStrategy -> Stats -> Maybe Power
+getPowerConsumption (DynamicPower Nothing) (Stats (Just AntminerS17Pro) _ _ h _ _ _ _ _ _ _) =
+  -- TODO: Should move hard coded values to miningDevicePowerConsumption function
   -- 45W per TH
-  s {power = Just $ Watt $ sum (snd <$> h) * 0.045}
-includePowerConsumption ConstantPower s@(Stats (Just d) _ _ _ _ _ _ _ _ _ m) =
-  s {power = eitherToMaybe $ miningDevicePowerConsumption d m}
+  Just $ Watt $ sum (snd <$> h) * 0.045
+getPowerConsumption (DynamicPower (Just (Watt w))) (Stats _ _ _ h _ _ _ _ _ _ _) =
+  Just $ Watt $ sum (snd <$> h) * w
+getPowerConsumption (ConstantPower Nothing) (Stats (Just d) _ _ _ _ _ _ _ _ _ m) =
+  eitherToMaybe $ miningDevicePowerConsumption d m
   where
     eitherToMaybe :: Either a b -> Maybe b
     eitherToMaybe (Right b) = Just b
     eitherToMaybe (Left _) = Nothing
-includePowerConsumption _ s@(Stats (Just _) _ _ _ _ _ _ _ _ _ _) = s
-includePowerConsumption _ s@(Stats Nothing _ _ _ _ _ _ _ _ _ _) = s
+getPowerConsumption (ConstantPower mp) _ = mp
+getPowerConsumption _ _ = Nothing
 
 includeIdealPercentage :: Stats -> Stats
 includeIdealPercentage s = s {hashratesIdealPercentage = calcIdealPercentage s}
