@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.7.9.0
+
+- Allow for dynamic power strategy power rate override via the command line.
+
 ## 0.7.8.0
 
 - Remove dependency on BitcoinChain.com in favor of blockchain.info for difficulty and reward data
