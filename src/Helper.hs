@@ -50,15 +50,15 @@ instance S.Serialize RawBlock
 
 -- | Get current device profitability for a devices current hash rates (USD / second)
 --   https://en.bitcoin.it/wiki/Difficulty
-getProfitability :: HashRates -- | All hash rates on device (hash / second)
-                 -> Difficulty -- | Current bitcoin difficulty (hash)
-                 -> Bitcoins -- | Current block reward (BTC)
-                 -> Bitcoins -- | Estimated fees from block (BTC)
-                 -> Power -- | Devices power consumption (watts)
-                 -> EnergyRate -- | Current electricity rate (USD / watt * hour)
-                 -> Price -- | Current exchange rate (USD / BTC)
-                 -> Rational -- | Pool fee percentage
-                 -> Rate -- | USD/day
+getProfitability :: HashRates -- ^ All hash rates on device (hash / second)
+                 -> Difficulty -- ^ Current bitcoin difficulty (hash)
+                 -> Bitcoins -- ^ Current block reward (BTC)
+                 -> Bitcoins -- ^ Estimated fees from block (BTC)
+                 -> Power -- ^ Devices power consumption (watts)
+                 -> EnergyRate -- ^ Current electricity rate (USD / watt * hour)
+                 -> Price -- ^ Current exchange rate (USD / BTC)
+                 -> Rational -- ^ Pool fee percentage
+                 -> Rate -- ^ USD/day
 getProfitability hr d br fr (Watt pc)
                  (EnergyRate USD KiloWattHour er) bp pf =
   let
@@ -77,11 +77,11 @@ calculateTimeToGenerateBlock (Ghs hr) (Difficulty d)
   | sum hr == 0 = Nothing
   | otherwise = Just $ Time Second $ (d * (2^ (32::Integer))) / (sum hr * 10^(9::Integer))
 
-revenueRate :: HashRates -- | ALl hash rates on device
-            -> Difficulty -- | Current difficulty
-            -> Bitcoins -- | Current block reward
-            -> Bitcoins -- | Estimated fees collected from block
-            -> Price -- | Current bitcoin price
+revenueRate :: HashRates -- ^ All hash rates on device
+            -> Difficulty -- ^ Current difficulty
+            -> Bitcoins -- ^ Current block reward
+            -> Bitcoins -- ^ Estimated fees collected from block
+            -> Price -- ^ Current bitcoin price
             -> Rate
 revenueRate hr d (Bitcoins Bitcoin br) (Bitcoins Bitcoin fr) (Price USD p) =
   case calculateTimeToGenerateBlock hr d of
@@ -240,9 +240,9 @@ instance (S.Serialize a) => S.Serialize (CacheData a)
 
 -- | Cache an IO call if it is 'Serialize'
 cacheIO :: (S.Serialize s)
-        => FilePath -- | Key for storing the and retrieving the cache
-        -> C.NominalDiffTime -- | Amount of time to invalidate previous cache
-        -> IO s     -- | IO function to cache
+        => FilePath -- ^ Key for storing the and retrieving the cache
+        -> C.NominalDiffTime -- ^ Amount of time to invalidate previous cache
+        -> IO s     -- ^ IO function to cache
         -> IO s
 cacheIO k i f = do
   d <- D.getXdgDirectory D.XdgCache "check_cgminer"
@@ -271,7 +271,6 @@ deleteCache k = do
   d <- D.getXdgDirectory D.XdgCache "check_cgminer"
   D.createDirectoryIfMissing True d
   D.removeFile $ d </> k
-
 
 -- For debugging
 timeToDouble :: Time -> Double
