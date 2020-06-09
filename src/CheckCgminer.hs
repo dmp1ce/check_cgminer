@@ -62,6 +62,7 @@ data CliOptions = CliOptions
   , electricity_rate :: Double
   , profitability_warning :: Double
   , profitability_critical :: Double
+  , block_fee_average_num :: Integer
   , block_reward :: Maybe Double
   , mining_fee_reward :: Maybe Double
   , pool_fee :: Double
@@ -105,6 +106,8 @@ defaultProfitabilityCriticalThreshold :: Double
 defaultProfitabilityCriticalThreshold = 0
 defaultPoolFee :: Double
 defaultPoolFee = 0
+defaultBlockFeeAverageNum :: Integer
+defaultBlockFeeAverageNum = 10
 
 cliOptions :: Parser CliOptions
 cliOptions = CliOptions
@@ -275,6 +278,13 @@ cliOptions = CliOptions
      <> metavar "NUMBER"
      <> value defaultProfitabilityCriticalThreshold
      <> help "Critical profitability threshold in USD/day"
+     <> showDefault
+      )
+  <*> option auto
+      ( long "fee_block_average_num"
+     <> metavar "NUMBER"
+     <> help "Number of past blocks to use for fee average"
+     <> value defaultBlockFeeAverageNum
      <> showDefault
       )
   <*> optional (option auto
@@ -464,7 +474,7 @@ instance ToPerfData PerfDataWorkMode where
 
 -- | Try to parse stats from miner. Return error `T.Text` if for failure.
 tryCommand :: T.Text -> (ReplyApi -> Either String Stats) -> CliOptions -> IO (Either T.Text Stats)
-tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
+tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = do
   r <- catches (sendCGMinerCommand h p c)
        [ Handler (\(e :: IOException) ->
                     error $ "IOException while sending '" ++ T.unpack c ++ "' command: " ++ show e
@@ -498,7 +508,7 @@ trySummary = tryCommand "summary" getSummary
 
 execCheck :: CliOptions -> IO ()
 execCheck opts@(CliOptions _ _ tw tc hw hc hmax hirw hirc hu flw flc fhw fhc vhw vhc freqhw
-                freqhc ps mpc erd profw profc mbr mmfr pfp) = do
+                freqhc ps mpc erd profw profc bfan mbr mmfr pfp) = do
   -- Try to get "stats" command first
   eStats <- tryStats opts
   processStats eStats
@@ -525,7 +535,7 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hirw hirc hu flw flc fhw fhc vhw
     getProfitabilityFactors :: IO (Maybe ProfitabilityFactors)
     getProfitabilityFactors = do
       dNr <- cacheIO "difficultyAndRewardCache" nominalDay getBitcoinDifficultyAndReward
-      mr <- cacheIO "minerFeeRewardCache" nominalDay getBitcoinAverageMiningFeeReward
+      mr <- cacheIO "minerFeeRewardCache" nominalDay $ getBitcoinAverageMiningFeeReward bfan
       p <- cacheIO "priceCache" nominalDay getBitcoinPrice
       let er = EnergyRate USD KiloWattHour (toRational erd)
       return $ ProfitabilityFactors er <$> (fst <$> dNr) <*> p

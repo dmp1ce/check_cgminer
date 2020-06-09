@@ -1,5 +1,10 @@
 # Changelog for check_cgminer
 
+## 0.7.10.0
+
+- Fix block fee calculation for profitability calculation
+- Allow option to specify the number of past blocks to average when considering average block fee
+
 ## 0.7.9.0
 
 - Allow for dynamic power strategy power rate override via the command line.

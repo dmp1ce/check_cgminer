@@ -164,9 +164,34 @@ getBitcoinDifficultyAndRewardFromBitcoinChain = do
               _ -> return Nothing
   return $ (,) <$> d <*> reward
 
--- Average mining fee per block
-getBitcoinAverageMiningFeeReward :: IO (Maybe Bitcoins)
-getBitcoinAverageMiningFeeReward = do
+-- | Average mining fee per block
+getBitcoinAverageMiningFeeReward :: Integer -> IO (Maybe Bitcoins)
+getBitcoinAverageMiningFeeReward = getBitcoinAverageBlockFeesBlockchainInfo
+
+-- | Get the average fee for past blocks
+--   Can take up to about 1 second wait per block.
+getBitcoinAverageBlockFeesBlockchainInfo :: Integer -- ^ How many blocks back to average
+                           -> IO (Maybe Bitcoins)
+getBitcoinAverageBlockFeesBlockchainInfo h
+  | h <= 0 = return $ Just $ Bitcoins Bitcoin 0
+  | otherwise = do
+  l <- getLatestBitcoinBlockCached
+  t <- f h l
+  return $ Just $ Bitcoins Bitcoin $ (t / toRational h) / 100000000
+  where
+    f :: Integer -> Maybe RawBlock -> IO Rational
+    f 0 _ = return 0
+    f h' b =
+      case b of
+        Just b' -> do
+          p <- getBitcoinRawBlockCached $ _previousBlock b'
+          pf <- f (h' -1) p
+          return $  _fee b' + pf
+        Nothing -> return 0
+
+-- Archived and original Fee average from blockchain.com
+getBitcoinAverageBlockFeesBitcoinchain :: IO (Maybe Bitcoins)
+getBitcoinAverageBlockFeesBitcoinchain = do
   r <- W.get "https://api-r.bitcoinchain.com/v1/blocks/100"
   let rats = rational <$> r ^.. W.responseBody . values . key "fee" . _String
   case (/ (toRational . length) rats) <$> (sum . (fst <$>) <$> sequenceA rats) of
@@ -204,26 +229,6 @@ getBitcoinRawBlock h = do
 getBitcoinRawBlockCached :: B.ByteString -> IO (Maybe RawBlock)
 getBitcoinRawBlockCached h = cacheIO ("block_" <> cs h) (C.nominalDay * 10000) $ getBitcoinRawBlock h
 
--- | Get the average fee for past blocks
---   Can take up to about 1 second wait per block.
-getBitcoinAverageBlockFees :: Integer -- ^ How many blocks back to average
-                           -> IO (Maybe Rational)
-getBitcoinAverageBlockFees h
-  | h <= 0 = return $ Just 0
-  | otherwise = do
-  l <- getLatestBitcoinBlockCached
-  t <- f h l
-  return $ Just $ t / toRational h
-  where
-    f :: Integer -> Maybe RawBlock -> IO Rational
-    f 0 _ = return 0
-    f h' b =
-      case b of
-        Just b' -> do
-          p <- getBitcoinRawBlockCached $ _previousBlock b'
-          pf <- f (h' -1) p
-          return $  _fee b' + pf
-        Nothing -> return 0
 
 -- Caching
 newtype CacheUTCTime = CacheUTCTime C.UTCTime deriving (Eq, Show)
