@@ -8,7 +8,7 @@ module Helper where
 
 import qualified Network.Wreq as W
 import Control.Lens ((^?), (^..))
-import Data.Aeson.Lens (key, _Number, _String, values)
+import Data.Aeson.Lens (key, _Number, _String, _Integer, values)
 import Data.Text.Read (rational)
 import Text.Read (readEither)
 import qualified Data.Serialize as S
@@ -38,6 +38,15 @@ data Price = Price MonetaryUnit Rational deriving (Show, Generic)
 instance S.Serialize Price
 data Time = Time TimeUnit Rational deriving (Eq, Show)
 data Rate = Rate MonetaryUnit TimeUnit Rational deriving (Show)
+
+-- | Blockchain.info RawBlock data
+data RawBlock = RawBlock { _blockHash :: B.ByteString    -- ^ Block hash
+                         , _previousBlock :: B.ByteString -- ^ Previous block hash
+                         , _fee :: Rational        -- ^ Bitcoin fee
+                         , _height :: Integer      -- ^ Block height
+                         }
+  deriving (Show, Generic)
+instance S.Serialize RawBlock
 
 -- | Get current device profitability for a devices current hash rates (USD / second)
 --   https://en.bitcoin.it/wiki/Difficulty
@@ -163,6 +172,58 @@ getBitcoinAverageMiningFeeReward = do
   case (/ (toRational . length) rats) <$> (sum . (fst <$>) <$> sequenceA rats) of
     Right r' -> return $ Just $ Bitcoins Bitcoin r'
     Left _ -> return Nothing
+
+-- Get the current height of the bitcoin blockchain
+getBitcoinBlockHeight :: IO (Maybe Integer)
+getBitcoinBlockHeight = do
+  r <- W.get "https://blockchain.info/latestblock"
+  return $ r ^? W.responseBody . key "height" . _Integer
+
+-- Get the latest block
+getLatestBitcoinBlock :: IO (Maybe RawBlock)
+getLatestBitcoinBlock = do
+  r <- W.get "https://blockchain.info/latestblock"
+  case r ^? W.responseBody . key "hash" . _String of
+    Nothing -> return Nothing
+    Just h ->  getBitcoinRawBlock (cs h)
+
+-- | Get latest block with cache
+getLatestBitcoinBlockCached :: IO (Maybe RawBlock)
+getLatestBitcoinBlockCached = cacheIO "latestblock" 300 getLatestBitcoinBlock
+
+-- | Get block by hash
+getBitcoinRawBlock :: B.ByteString -> IO (Maybe RawBlock)
+getBitcoinRawBlock h = do
+  r <- W.get $ "https://blockchain.info/rawblock/" <> cs h
+  return $ RawBlock <$> (cs <$> r ^? W.responseBody . key "hash" . _String)
+                    <*> (cs <$> r ^? W.responseBody . key "prev_block" . _String)
+                    <*> (toRational <$> r ^? W.responseBody . key "fee" . _Number)
+                    <*> (r ^? W.responseBody . key "height" . _Integer)
+
+-- | Get block by hash with cache
+getBitcoinRawBlockCached :: B.ByteString -> IO (Maybe RawBlock)
+getBitcoinRawBlockCached h = cacheIO ("block_" <> cs h) (C.nominalDay * 10000) $ getBitcoinRawBlock h
+
+-- | Get the average fee for past blocks
+--   Can take up to about 1 second wait per block.
+getBitcoinAverageBlockFees :: Integer -- ^ How many blocks back to average
+                           -> IO (Maybe Rational)
+getBitcoinAverageBlockFees h
+  | h <= 0 = return $ Just 0
+  | otherwise = do
+  l <- getLatestBitcoinBlockCached
+  t <- f h l
+  return $ Just $ t / toRational h
+  where
+    f :: Integer -> Maybe RawBlock -> IO Rational
+    f 0 _ = return 0
+    f h' b =
+      case b of
+        Just b' -> do
+          p <- getBitcoinRawBlockCached $ _previousBlock b'
+          pf <- f (h' -1) p
+          return $  _fee b' + pf
+        Nothing -> return 0
 
 -- Caching
 newtype CacheUTCTime = CacheUTCTime C.UTCTime deriving (Eq, Show)
