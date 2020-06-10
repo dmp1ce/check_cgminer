@@ -18,6 +18,7 @@ import qualified Data.ByteString as B
 import qualified Data.Time.Clock as C
 import GHC.Generics (Generic)
 import Data.String.Conversions (cs)
+import Control.Concurrent (threadDelay)
 
 -- Units
 data BitcoinUnit = Bitcoin deriving (Show, Generic)
@@ -171,7 +172,7 @@ getBitcoinAverageMiningFeeReward = getBitcoinAverageBlockFeesBlockchainInfo
 -- | Get the average fee for past blocks
 --   Can take up to about 1 second wait per block.
 getBitcoinAverageBlockFeesBlockchainInfo :: Integer -- ^ How many blocks back to average
-                           -> IO (Maybe Bitcoins)
+                                         -> IO (Maybe Bitcoins)
 getBitcoinAverageBlockFeesBlockchainInfo h
   | h <= 0 = return $ Just $ Bitcoins Bitcoin 0
   | otherwise = do
@@ -250,9 +251,54 @@ cacheIO :: (S.Serialize s)
         -> IO s     -- ^ IO function to cache
         -> IO s
 cacheIO k i f = do
-  d <- D.getXdgDirectory D.XdgCache "check_cgminer"
-  D.createDirectoryIfMissing True d
-  let keyPath = d </> k
+  keyPath <- initCache k
+  cacheExists <- validCache keyPath i
+  case cacheExists of
+    Nothing -> cacheIO' keyPath f
+    Just r -> return r
+  where
+    cacheIO' k' f' = do r <- f'
+                        utct <- C.getCurrentTime
+                        B.writeFile k' (S.encode $ CacheData (CacheUTCTime utct) r)
+                        return r
+
+-- | Only allow one process access to IO at a time to avoid overloading the system when cache expires.
+delayedCacheIO :: (S.Serialize s)
+        => FilePath -- ^ Key for storing the and retrieving the cache
+        -> C.NominalDiffTime -- ^ Amount of time to invalidate previous cache
+        -> C.NominalDiffTime -- ^ Amount of time to delay if cache is being rebuilt
+        -> IO s     -- ^ IO function to cache
+        -> IO s
+delayedCacheIO k i d f = do
+  keyPath <- initCache k
+  cacheExists <- validCache keyPath i
+  case cacheExists of
+    Nothing -> delayLoop d
+    Just r -> return r
+  where
+    delayLoop delay = do
+      let lockName = "." <> k <> ".lock"
+      lockPath <- initCache lockName
+      lockCache <- (validCache lockName delay :: IO (Maybe Bool))
+      case lockCache of
+        Nothing -> do
+          -- putStrLn "Lock missing. Building cache."
+          -- create lock, run cacheIO, delete lock
+          utct <- C.getCurrentTime
+          B.writeFile lockPath (S.encode $ CacheData (CacheUTCTime utct) True)
+          r <- cacheIO k i f
+          deleteCache lockName
+          return r
+        Just _ -> do
+          -- putStrLn "Lock found. Delay for 1 second"
+          threadDelay 1000000
+          -- putStrLn "Starting delay loop again"
+          delayLoop delay
+
+-- | Check to see if a cache is valid. Returns result if valid.
+validCache :: (S.Serialize s) => FilePath -> C.NominalDiffTime -> IO (Maybe s)
+validCache k i = do
+  keyPath <- initCache k
 
   cacheExists <- D.doesFileExist keyPath
   if cacheExists
@@ -261,21 +307,22 @@ cacheIO k i f = do
               Right (CacheData (CacheUTCTime d') r) ->
                 do t <- C.getCurrentTime
                    if C.diffUTCTime t d' >= i
-                     then cacheIO' keyPath f
-                     else return r
-              Left _ -> cacheIO' keyPath f
-    else cacheIO' keyPath f
-  where
-    cacheIO' k' f' = do r <- f'
-                        utct <- C.getCurrentTime
-                        B.writeFile k' (S.encode $ CacheData (CacheUTCTime utct) r)
-                        return r
+                     then return Nothing
+                     else return $ Just r
+              Left _ -> return Nothing
+    else return Nothing
 
 deleteCache :: FilePath -> IO ()
 deleteCache k = do
+  dk <- initCache k
+  D.removeFile dk
+
+-- | Initialize cache and return path to where cache exists
+initCache :: FilePath -> IO FilePath
+initCache k = do
   d <- D.getXdgDirectory D.XdgCache "check_cgminer"
   D.createDirectoryIfMissing True d
-  D.removeFile $ d </> k
+  return $ d </> k
 
 -- For debugging
 timeToDouble :: Time -> Double
