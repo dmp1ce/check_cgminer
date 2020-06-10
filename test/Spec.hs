@@ -1,8 +1,11 @@
 import ReplyExamples
-import Helper ( WorkMode (WorkMode), CacheUTCTime (CacheUTCTime), CacheData(CacheData), TimeUnit (Second, Day)
-              , MonetaryUnit(USD), Rate (Rate), deleteCache, cacheIO, Price (Price), Bitcoins (Bitcoins)
-              , BitcoinUnit (Bitcoin), Difficulty (Difficulty), HashRates (Ghs), revenueRate, Time (Time)
-              , calculateTimeToGenerateBlock, getProfitability, EnergyUnit (KiloWattHour)
+import Helper ( WorkMode (WorkMode), CacheUTCTime (CacheUTCTime)
+              , CacheData(CacheData), TimeUnit (Second, Day)
+              , MonetaryUnit(USD), Rate (Rate), deleteCache, cacheIO
+              , delayedCacheIO, Price (Price), Bitcoins (Bitcoins)
+              , BitcoinUnit (Bitcoin), Difficulty (Difficulty), HashRates (Ghs)
+              , revenueRate, Time (Time), calculateTimeToGenerateBlock
+              , getProfitability, EnergyUnit (KiloWattHour)
               , EnergyRate (EnergyRate), Power (Watt), MiningDevice (..) )
 import Test.Tasty ( defaultMain, TestTree, testGroup )
 import Test.Tasty.HUnit ( testCase, (@?=), (@?), assertBool )
@@ -18,6 +21,10 @@ import CgminerApi ( QueryApi (QueryApi), decodeReply, getStats, getSummary, Stat
                   , includePowerConsumption, calcIdealPercentage, includeIdealPercentage, PowerStrategy (..) )
 import CheckCgminer (anyTempsAreZero, anyAboveThreshold, anyBelowThreshold)
 import qualified Data.Text as T
+
+-- Thread testing
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.MVar (newEmptyMVar, takeMVar, putMVar, readMVar)
 
 main :: IO ()
 main = defaultMain tests
@@ -384,6 +391,14 @@ cache = testGroup "Cache tests"
     out2 <- cacheIO c C.nominalDay (pure m2::IO String)
     deleteCache c
     assertBool "cacheIO didn't respect cache time" (out1 == m1 && out2 == m1)
+  , testCase "delayedCacheIO respects cache time" $ do
+    let m1 = "Something here"
+        m2 = "Something here but won't get"
+        c = "delayedCacheIO_test1"
+    out1 <- delayedCacheIO c C.nominalDay 5 (pure m1::IO String)
+    out2 <- delayedCacheIO c C.nominalDay 5 (pure m2::IO String)
+    deleteCache c
+    assertBool "delayedCacheIO didn't respect cache time" (out1 == m1 && out2 == m1)
   , testCase "cacheIO can be invalidated" $ do
     let m1 = "Something here"
         m2 = "Something here more"
@@ -392,4 +407,38 @@ cache = testGroup "Cache tests"
     out2 <- cacheIO c 0 (pure m2::IO String)
     deleteCache c
     assertBool "cacheIO didn't respect cache time" (out1 == m1 && out2 == m2)
+  , testCase "delayedCacheIO waits for previous processes correctly" $ do
+    let m1 = "p1 "
+        m2 = "p2 "
+        m3 = "p3 "
+        halfSecond = 500000
+        c = "cacheIO_test3"
+    mv <- newEmptyMVar
+
+    -- Start a delayed cacheIO with 1 second cache and 3 second delay if currently running
+    _ <- forkIO $ delayedCacheIO c 1 15 $ do
+      threadDelay $ halfSecond * 2
+      putMVar mv m1
+
+    -- Wait half a second and then run another delayed cacheIO and see if it
+    -- waits for the last delayed cacheIO
+    threadDelay halfSecond
+    -- This will not run because it will hit the cache
+    _ <- forkIO $ delayedCacheIO c 1 15 $ do
+      t <- takeMVar mv
+      putMVar mv (t ++ m2)
+
+    -- Let the cache expire
+    threadDelay $ halfSecond * 4
+    _ <- forkIO $ delayedCacheIO c 1 15 $ do
+      t <- takeMVar mv
+      putMVar mv (t ++ m3)
+
+    -- Wait for processes to complete
+    threadDelay halfSecond
+
+    out <- readMVar mv
+
+    deleteCache c
+    assertBool ("delayedCacheIO didn't complete in the correct order. Output: " ++ out) (out == (m1 ++ m3) )
   ]

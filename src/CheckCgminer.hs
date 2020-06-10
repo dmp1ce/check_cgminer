@@ -35,7 +35,8 @@ import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stat
                   , PowerStrategy (DynamicPower, ConstantPower))
 import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins (Bitcoins), BitcoinUnit (Bitcoin)
              , Difficulty, EnergyRate (EnergyRate), EnergyUnit (KiloWattHour), MonetaryUnit (USD)
-             , Price, cacheIO, getBitcoinDifficultyAndReward, WorkMode (WorkMode), getBitcoinPrice, Rate (Rate)
+             , Price, delayedCacheIO, getBitcoinDifficultyAndReward
+             , WorkMode (WorkMode), getBitcoinPrice, Rate (Rate)
              , TimeUnit (Day, Second), getBitcoinAverageMiningFeeReward)
 
 data CliOptions = CliOptions
@@ -534,9 +535,9 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hirw hirc hu flw flc fhw fhc vhw
 
     getProfitabilityFactors :: IO (Maybe ProfitabilityFactors)
     getProfitabilityFactors = do
-      dNr <- cacheIO "difficultyAndRewardCache" nominalDay getBitcoinDifficultyAndReward
-      mr <- cacheIO "minerFeeRewardCache" nominalDay $ getBitcoinAverageMiningFeeReward bfan
-      p <- cacheIO "priceCache" nominalDay getBitcoinPrice
+      dNr <- delayedCacheIO "difficultyAndRewardCache" nominalDay 15 getBitcoinDifficultyAndReward
+      mr <- getBitcoinAverageMiningFeeReward bfan
+      p <- delayedCacheIO "priceCache" nominalDay 15 getBitcoinPrice
       let er = EnergyRate USD KiloWattHour (toRational erd)
       return $ ProfitabilityFactors er <$> (fst <$> dNr) <*> p
         <*> maybe (snd <$> dNr) (\d -> Just (Bitcoins Bitcoin $ toRational d)) mbr

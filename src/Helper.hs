@@ -215,7 +215,7 @@ getLatestBitcoinBlock = do
 
 -- | Get latest block with cache
 getLatestBitcoinBlockCached :: IO (Maybe RawBlock)
-getLatestBitcoinBlockCached = cacheIO "latestblock" 300 getLatestBitcoinBlock
+getLatestBitcoinBlockCached = delayedCacheIO "latestblock" 300 15 getLatestBitcoinBlock
 
 -- | Get block by hash
 getBitcoinRawBlock :: B.ByteString -> IO (Maybe RawBlock)
@@ -228,7 +228,7 @@ getBitcoinRawBlock h = do
 
 -- | Get block by hash with cache
 getBitcoinRawBlockCached :: B.ByteString -> IO (Maybe RawBlock)
-getBitcoinRawBlockCached h = cacheIO ("block_" <> cs h) (C.nominalDay * 10000) $ getBitcoinRawBlock h
+getBitcoinRawBlockCached h = delayedCacheIO ("block_" <> cs h) (C.nominalDay * 10000) 15 $ getBitcoinRawBlock h
 
 
 -- Caching

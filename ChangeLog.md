@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.7.11.0
+
+- Add delayedCacheIO function for making sure resources don't get overrun when caches expire
+
 ## 0.7.10.0
 
 - Fix block fee calculation for profitability calculation
