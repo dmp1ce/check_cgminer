@@ -258,7 +258,7 @@ cliOptions = CliOptions
    <*> optional (option auto
       ( long "device_power"
      <> metavar "NUMBER"
-     <> help "Override estimated device power consumption in Watt. When used with dynamic power flag, Watts per Gigahash is assumed."
+     <> help "Override estimated device power consumption in Watt per hash. When used with dynamic power flag, Watts per hash is assumed."
       ))
    <*> option auto
       ( long "electric_rate"

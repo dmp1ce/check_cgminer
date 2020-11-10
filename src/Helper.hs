@@ -55,7 +55,7 @@ getProfitability :: HashRates -- ^ All hash rates on device (hash / second)
                  -> Difficulty -- ^ Current bitcoin difficulty (hash)
                  -> Bitcoins -- ^ Current block reward (BTC)
                  -> Bitcoins -- ^ Estimated fees from block (BTC)
-                 -> Power -- ^ Devices power consumption (watts)
+                 -> Power -- ^ Devices power consumption per hash (watts)
                  -> EnergyRate -- ^ Current electricity rate (USD / watt * hour)
                  -> Price -- ^ Current exchange rate (USD / BTC)
                  -> Rational -- ^ Pool fee percentage
