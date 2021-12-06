@@ -30,9 +30,9 @@ import Data.Time.Clock (nominalDay)
 import Text.Printf (printf)
 import Control.Exception (catches, IOException, SomeException, Handler (Handler))
 
-import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats)
+import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats), tempuratures
                   , TextRationalPairs, ReplyApi, includePowerConsumption, includeIdealPercentage
-                  , PowerStrategy (DynamicPower, ConstantPower))
+                  , PowerStrategy (DynamicPower, ConstantPower), getTemps, isBOSMinerPlus)
 import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins (Bitcoins), BitcoinUnit (Bitcoin)
              , Difficulty, EnergyRate (EnergyRate), EnergyUnit (KiloWattHour), MonetaryUnit (USD)
              , Price, delayedCacheIO, getBitcoinDifficultyAndReward
@@ -507,11 +507,26 @@ tryStats = tryCommand "stats" getStats
 trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
+tryTemps :: CliOptions -> IO (Either T.Text Stats)
+tryTemps = tryCommand "temps" getTemps
+
 execCheck :: CliOptions -> IO ()
 execCheck opts@(CliOptions _ _ tw tc hw hc hmax hirw hirc hu flw flc fhw fhc vhw vhc freqhw
                 freqhc ps mpc erd profw profc bfan mbr mmfr pfp) = do
   -- Try to get "stats" command first
   eStats <- tryStats opts
+
+  when ((isBOSMinerPlus <$> eStats) == Right True) $ do
+    -- If BraiinsOS+ then try a few more API calls
+    eTemps <- tryTemps opts
+
+    -- Merge additional calls into stats `processStats` call
+    print eStats
+    --print eTemps
+    let Right _t = tempuratures <$> eTemps
+    processStats $ (\_s -> _s { tempuratures = _t}) <$> eStats
+
+  -- BOS+ wasn't detected to process STATS next
   processStats eStats
 
   -- Something went wrong with stats command so try "summary" next

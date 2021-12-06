@@ -94,7 +94,7 @@ revenueRate hr d (Bitcoins Bitcoin br) (Bitcoins Bitcoin fr) (Price USD p) =
 
 data MiningDevice = AntminerS9SE | AntminerS9k | AntminerDR5 | AntminerS9 | AntminerS17
                   | AntminerS15 | AntminerS17Pro | AntminerZ9Mini | Whatminer
-                  | AntminerS17Vnish
+                  | AntminerS17Vnish | AntminerS17_BOSPlus
   deriving (Ord, Eq, Show)
 
 -- | Default power consumption lookup

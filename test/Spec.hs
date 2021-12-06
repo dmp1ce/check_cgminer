@@ -18,7 +18,8 @@ import qualified Data.Serialize as S
 import qualified Data.Time.Clock as C
 
 import CgminerApi ( QueryApi (QueryApi), decodeReply, getStats, getSummary, Stats (Stats), replace
-                  , includePowerConsumption, calcIdealPercentage, includeIdealPercentage, PowerStrategy (..) )
+                  , includePowerConsumption, calcIdealPercentage, includeIdealPercentage, PowerStrategy (..)
+                  , isBOSMinerPlus, getTemps)
 import CheckCgminer (anyTempsAreZero, anyAboveThreshold, anyBelowThreshold)
 import qualified Data.Text as T
 
@@ -76,6 +77,26 @@ json = testGroup "json tests"
                            ]
                            Nothing
                           )
+  , testCase "Successfully decode example reply (braiinsOS+ s17)" $
+    isJust (decodeReply exampleReplyS17BraiinsOS_Plus) @? "exampleReply could not be decoded"
+  , testCase "Can detect braiinsOS+ S17 miners" $
+    let Just (Right s) = getStats <$> decodeReply exampleReplyS17BraiinsOS_Plus
+    in assertBool "brainsOS= S17 miner not detected" $ isBOSMinerPlus s
+  , testCase "Can get stats (braiinsOS+ s17)" $
+      let Just x = decodeReply exampleReplyS17BraiinsOS_Plus
+      in (getStats x)
+         @?= Right ( Stats (Just AntminerS17_BOSPlus) Nothing [] [] [] Nothing Nothing [] [] [] Nothing)
+  , testCase "Can get temps from (braiinsOS+ s17)" $
+      let Just x = decodeReply exampleReplyS17BraiinsOS_Plus_temps
+      in (getTemps x)
+         @?= Right  ( Stats Nothing Nothing
+                      [ ("Board0"::T.Text, 39.5625::Rational)
+                      , ("Chip0"::T.Text, 51.1875)
+                      , ("Board1", 38.5625)
+                      , ("Chip1", 52.0625)
+                      ]
+                      [] [] Nothing Nothing [] [] [] Nothing
+                    )
   , testCase "Successfully decode example reply (Z9-mini)" $
     isJust (decodeReply exampleReplyZ9mini) @? "exampleReply could not be decoded"
   , testCase "Can get stats (Z9-mini)" $

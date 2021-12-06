@@ -18,7 +18,7 @@ import Data.Scientific (Scientific, toBoundedInteger)
 import Helper ( miningDevicePowerConsumption
               , MiningDevice ( AntminerS9k, AntminerS9SE, AntminerS17Pro, AntminerS17
                              , AntminerS15, AntminerDR5, AntminerZ9Mini, AntminerS9
-                             , AntminerS17Vnish
+                             , AntminerS17Vnish, AntminerS17_BOSPlus
                              )
               , Power (Watt), WorkMode (WorkMode))
 
@@ -31,15 +31,30 @@ instance ToJSON QueryApi where
 instance FromJSON QueryApi
 
 data ReplyApi = ReplyApi
-  { status  :: Maybe Value
+  { status  :: Maybe Array
   , stats   :: Maybe Array
   , summary :: Maybe Array
+  , _temps :: Maybe [BOSPlusTemp]
   } deriving (Generic, Show, Eq)
 instance FromJSON ReplyApi where
   parseJSON = withObject "ReplyApi" $ \v -> ReplyApi
     <$> v .: "STATUS"
     <*> (v .:? "STATS")
     <*> (v .:? "SUMMARY")
+    <*> (v .:? "TEMPS")
+
+data BOSPlusTemp = BOSPlusTemp
+  { temp_temp :: Scientific
+  , temp_id :: Scientific
+  , temp_board :: Scientific
+  , temp_chip :: Scientific
+  } deriving (Generic, Show, Eq)
+instance FromJSON BOSPlusTemp where
+  parseJSON = withObject "BOSPlusTemp" $ \v -> BOSPlusTemp
+    <$> v .: "TEMP"
+    <*> (v .: "ID")
+    <*> (v .: "Board")
+    <*> (v .: "Chip")
 
 data PowerStrategy = ConstantPower (Maybe Power)
                    -- | Watt per Gigahash
@@ -93,34 +108,51 @@ getSummary reply = flip parseEither reply $ \r -> do
   hrates <- parseTextListToRational ["MHS 5s"] rawStats
   return $ Stats Nothing Nothing temps hrates [] Nothing Nothing fans [] [] Nothing
 
+-- | Parse temps from the "temps" API call from BOS+
+getTemps :: ReplyApi -> Either String Stats
+getTemps reply = flip parseEither reply $ \r -> do
+  let Just t = _temps r
+
+      temps = concat $
+        (\_t ->
+           let Just _id = T.pack . show <$> (toBoundedInteger $ temp_temp _t :: Maybe Int)
+           in [ ("Board"<>_id, toRational $ temp_board _t)
+              , ("Chip"<>_id, toRational $ temp_chip _t)]
+        ) <$> t
+
+  return $ Stats Nothing Nothing temps [] [] Nothing Nothing [] [] [] Nothing
 
 -- | Parse `Stats` from STATS section of reply
 getStats :: ReplyApi -> Either String Stats
 getStats reply = flip parseEither reply $ \r -> do
   --let Just stats' = stats obj
   --fail $ show $ Data.Vector.length statsArray
-  let Just s = stats r
+  let Just sStatus = status r
+      Just (Object statusStats) = sStatus !? 0
+      Just s = stats r
       Just (Object infoStats) = s !? 0
       Just (Object rawStats) = s !? 1
 
+  -- Check for BOS+ firmware with "Description"
+  mMinerDesc <- statusStats .:? "Description"
+  -- Check for most other firmware with "Type"
   mMinerType <- infoStats .:? "Type"
 
-  case mMinerType of
-    Just (String "Antminer S9 SE") -> parseS9seStats AntminerS9SE rawStats
-    Just (String "Antminer S9k") -> parseS9kStats AntminerS9k rawStats
-    Just (String "Antminer S17 Pro") -> parseS17Stats AntminerS17Pro rawStats
-    Just (String "Antminer S17") -> parseS17Stats AntminerS17 rawStats
-    Just (String "Antminer S15") -> parseS15Stats AntminerS15 rawStats
-    Just (String "Antminer DR5") -> parseDR5Stats AntminerDR5 rawStats
-    Just (String "Antminer Z9-Mini") -> parseZ9miniStats AntminerZ9Mini rawStats
-    Just (String "braiins-am1-s9") -> parseS9Stats AntminerS9 rawStats
-    Just (String s') ->
-      if "Antminer S17 (vnish" `isPrefixOf ` T.unpack s'
-      then parseS17VnishStats AntminerS17Vnish rawStats
-      else fail $ "Unexpected miner type: '" ++ T.unpack s' ++ "'"
-    Just s' -> fail $ "Unexpected miner type: " ++ show s'
-    -- Matches S9 miner case
-    Nothing -> parseS9Stats AntminerS9 rawStats
+  case (mMinerType, mMinerDesc) of
+    (Just (String "Antminer S9 SE"), _) -> parseS9seStats AntminerS9SE rawStats
+    (Just (String "Antminer S9k"), _) -> parseS9kStats AntminerS9k rawStats
+    (Just (String "Antminer S17 Pro"), _) -> parseS17Stats AntminerS17Pro rawStats
+    (Just (String "Antminer S17"), _) -> parseS17Stats AntminerS17 rawStats
+    (Just (String "Antminer S15"), _) -> parseS15Stats AntminerS15 rawStats
+    (Just (String "Antminer DR5"), _) -> parseDR5Stats AntminerDR5 rawStats
+    (Just (String "Antminer Z9-Mini"), _) -> parseZ9miniStats AntminerZ9Mini rawStats
+    (Just (String "braiins-am1-s9"), _) -> parseS9Stats AntminerS9 rawStats
+    (Just (String s'), Just (String d)) -> parseBasedOnPrefix s' d rawStats
+    (Just (String s'), Nothing) -> parseBasedOnPrefix s' "" rawStats
+    (Nothing, Just (String d)) -> parseBasedOnPrefix "" d rawStats
+    (Just s', _) -> fail $ "Unexpected miner type: " ++ show s'
+    -- Default to S9 miner case
+    (_, _) -> parseS9Stats AntminerS9 rawStats
   where
     parseStringRange :: Object -> Text -> [Int] -> Parser TextRationalPairs
     parseStringRange rawStats s range =
@@ -131,6 +163,12 @@ getStats reply = flip parseEither reply $ \r -> do
       idealrates <- parseStringRange rawStats "chain_rateideal" chainRateNums
       idealrateTotal <- expectRational <$> rawStats .: "total_rateideal"
       return (hrates, idealrates, idealrateTotal)
+
+    parseBasedOnPrefix :: Text -> Text -> Object -> Parser Stats
+    parseBasedOnPrefix s d rawStats
+      | "Antminer S17 (vnish" `isPrefixOf` T.unpack s = parseS17VnishStats AntminerS17Vnish rawStats
+      | "BOSminer bosminer-plus" `isPrefixOf` T.unpack d = parseS17_BOSPlusStats AntminerS17_BOSPlus rawStats
+      | otherwise = fail $ "Unexpected miner type: '" ++ T.unpack s ++ "'"
 
     parseS9seStats = parseS9kStats
     parseS9kStats d rawStats = do
@@ -172,6 +210,10 @@ getStats reply = flip parseEither reply $ \r -> do
       volts <- parseTextListToRational ["voltage6","voltage7","voltage8"] rawStats
       freqs <- parseTextListToRational ["freq_avg6","freq_avg7","freq_avg8"] rawStats
       return $ Stats (Just d) Nothing temps hrates idealrates (Just idealrateTotal) Nothing fans volts freqs Nothing
+    parseS17_BOSPlusStats d _ =
+      -- Skip parsing because nothing of interest will be available in stats for BOS+ miners
+      return $ Stats (Just d) Nothing [] [] [] Nothing Nothing [] [] [] Nothing
+
     s17ParseStats' rawStats = do
       temps <- parseTextListToRational ["temp1","temp2","temp3"
                                        ,"temp2_1","temp2_2","temp2_3"
@@ -246,3 +288,8 @@ parseWorkMode s = do
   return $ case wm of
     (Number n) -> WorkMode <$> toBoundedInteger n
     _ -> Nothing
+
+-- Detects BraiinsOS+ miner
+isBOSMinerPlus :: Stats -> Bool
+isBOSMinerPlus (Stats (Just AntminerS17_BOSPlus) _ _ _ _ _ _ _ _ _ _) = True
+isBOSMinerPlus _ = False
