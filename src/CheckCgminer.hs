@@ -422,14 +422,15 @@ checkStats (Stats _ mpc temps hashrates _ _ hashratesIdealRatioM
 
   where
     maxTemp = maximum $ snd <$> temps
-    minHashRates = minimum $ snd <$> hashrates
+    minimumSafe ll = if null ll then 0 else minimum ll
+    minHashRates = minimumSafe $ snd <$> hashrates
     addResultOK :: Maybe Rational -> NagiosPlugin ()
     addResultOK Nothing = addResult OK addResultOKStr
     addResultOK (Just prof) = addResult OK
       $ "Profitability is " <> ( T.pack . printf "%.4f" . toDouble) prof <> " USD/day, " <> addResultOKStr
     addResultOKStr = "Max temp: " <> (T.pack . show) (toDouble maxTemp) <> " C, "
       <> "Min hashrate: " <> T.pack (showFFloat Nothing (toDouble minHashRates) " " ++ hu ++ ", ")
-      <> "Min fanspeed: " <> (T.pack . show) (toDouble $ minimum $ snd <$> fanspeeds) <> " RPM"
+      <> "Min fanspeed: " <> (T.pack . show) (toDouble $ minimumSafe $ snd <$> fanspeeds) <> " RPM"
 
     processProfitability :: Rate -> NagiosPlugin ()
     processProfitability (Rate USD Second p) = processProfitability (Rate USD Day (p*24*60*60))
