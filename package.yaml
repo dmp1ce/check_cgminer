@@ -38,6 +38,7 @@ dependencies:
 - filepath
 - time
 - string-conversions
+- unordered-containers
 
 default-extensions:
   - OverloadedStrings

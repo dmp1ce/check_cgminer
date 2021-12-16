@@ -19,7 +19,7 @@ import qualified Data.Time.Clock as C
 
 import CgminerApi ( QueryApi (QueryApi), decodeReply, getStats, getSummary, Stats (Stats), replace
                   , includePowerConsumption, calcIdealPercentage, includeIdealPercentage, PowerStrategy (..)
-                  , isBOSMinerPlus, getTemps)
+                  , isBOSMinerPlus, getBOSPlusStats)
 import CheckCgminer (anyTempsAreZero, anyAboveThreshold, anyBelowThreshold)
 import qualified Data.Text as T
 
@@ -84,18 +84,44 @@ json = testGroup "json tests"
     in assertBool "brainsOS= S17 miner not detected" $ isBOSMinerPlus s
   , testCase "Can get stats (braiinsOS+ s17)" $
       let Just x = decodeReply exampleReplyS17BraiinsOS_Plus
-      in (getStats x)
+      in getStats x
          @?= Right ( Stats (Just AntminerS17_BOSPlus) Nothing [] [] [] Nothing Nothing [] [] [] Nothing)
-  , testCase "Can get temps from (braiinsOS+ s17)" $
-      let Just x = decodeReply exampleReplyS17BraiinsOS_Plus_temps
-      in (getTemps x)
+  , testCase "Can get stats from (braiinsOS+ s17)" $
+      let Just x = decodeReply exampleReplyS17BraiinsOS_Plus_temps_devs_fans
+      in (includeIdealPercentage . includePowerConsumption (ConstantPower Nothing) <$> getBOSPlusStats x)
+      --in getBOSPlusStats x
          @?= Right  ( Stats Nothing Nothing
-                      [ ("Board0"::T.Text, 39.5625::Rational)
-                      , ("Chip0"::T.Text, 51.1875)
-                      , ("Board1", 38.5625)
-                      , ("Chip1", 52.0625)
+                      [ ("Board0"::T.Text, 67.25::Rational)
+                      , ("Chip0"::T.Text, 97.875)
+                      , ("Board1", 64.5625)
+                      , ("Chip1", 98.0)
+                      , ("Board2", 48.6875)
+                      , ("Chip2", 81.125)
                       ]
-                      [] [] Nothing Nothing [] [] [] Nothing
+                      [ ("hash0"::T.Text, 22461.758949370585::Rational)
+                      , ("hash1", 22496.607035569035)
+                      , ("hash2", 22530.21525027831)
+                      ]
+                      [ ("hashNominal0"::T.Text, 22059.569612639997::Rational)
+                      , ("hashNominal1", 22059.569611968)
+                      , ("hashNominal2", 22019.025612191997)
+                      ]
+                      (Just $ 33069082418399997 % 500000000000)
+                      (Just $ 33744290617608965 % 33069082418399997) -- 102.041811111255 %
+                      [ ("fan0", 6000)
+                      , ("fan1", 0 )
+                      , ("fan2", 5520)
+                      , ("fan3", 5520)
+                      ]
+                      [ ("voltage0", 19.318065)
+                      , ("voltage1", 19.256835)
+                      , ("voltage2", 19.293573)
+                      ]
+                      [ ("frequency0", 701.466481)
+                      , ("frequency1", 701.466481)
+                      , ("frequency2", 701.466481)
+                      ]
+                      Nothing
                     )
   , testCase "Successfully decode example reply (Z9-mini)" $
     isJust (decodeReply exampleReplyZ9mini) @? "exampleReply could not be decoded"

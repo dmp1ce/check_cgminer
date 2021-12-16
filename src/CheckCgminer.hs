@@ -30,9 +30,9 @@ import Data.Time.Clock (nominalDay)
 import Text.Printf (printf)
 import Control.Exception (catches, IOException, SomeException, Handler (Handler))
 
-import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats), tempuratures
+import CgminerApi ( QueryApi (QueryApi), getStats, getSummary, decodeReply, Stats (Stats), device
                   , TextRationalPairs, ReplyApi, includePowerConsumption, includeIdealPercentage
-                  , PowerStrategy (DynamicPower, ConstantPower), getTemps, isBOSMinerPlus)
+                  , PowerStrategy (DynamicPower, ConstantPower), getBOSPlusStats, isBOSMinerPlus)
 import Helper( getProfitability, Power (Watt), HashRates (Ghs), Bitcoins (Bitcoins), BitcoinUnit (Bitcoin)
              , Difficulty, EnergyRate (EnergyRate), EnergyUnit (KiloWattHour), MonetaryUnit (USD)
              , Price, delayedCacheIO, getBitcoinDifficultyAndReward
@@ -485,8 +485,9 @@ tryCommand c f (CliOptions h p _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
        ]
 
   -- Uncomment for getting the raw reply from a miner for testing
-  --print r
-  --_ <- error ""
+  --when (c == "temps+devs+fans+devdetails") $ do
+  --  print r
+  --  error ""
 
   if isNothing r
   then return $ Left $ "Could not parse reply from " <> (T.pack . show) h <> ":" <> (T.pack . show) p
@@ -508,8 +509,8 @@ tryStats = tryCommand "stats" getStats
 trySummary :: CliOptions -> IO (Either T.Text Stats)
 trySummary = tryCommand "summary" getSummary
 
-tryTemps :: CliOptions -> IO (Either T.Text Stats)
-tryTemps = tryCommand "temps" getTemps
+tryBOSPlusStats :: CliOptions -> IO (Either T.Text Stats)
+tryBOSPlusStats = tryCommand "temps+devs+fans+devdetails" getBOSPlusStats
 
 execCheck :: CliOptions -> IO ()
 execCheck opts@(CliOptions _ _ tw tc hw hc hmax hirw hirc hu flw flc fhw fhc vhw vhc freqhw
@@ -518,14 +519,12 @@ execCheck opts@(CliOptions _ _ tw tc hw hc hmax hirw hirc hu flw flc fhw fhc vhw
   eStats <- tryStats opts
 
   when ((isBOSMinerPlus <$> eStats) == Right True) $ do
-    -- If BraiinsOS+ then try a few more API calls
-    eTemps <- tryTemps opts
+    -- Get all Stats for BOSPlus miners
+    eBOSPlusStats <- tryBOSPlusStats opts
 
     -- Merge additional calls into stats `processStats` call
-    print eStats
-    --print eTemps
-    let Right _t = tempuratures <$> eTemps
-    processStats $ (\_s -> _s { tempuratures = _t}) <$> eStats
+    let Right _d = device <$> eStats
+    processStats $ (\_s -> _s { device = _d}) <$> eBOSPlusStats
 
   -- BOS+ wasn't detected to process STATS next
   processStats eStats

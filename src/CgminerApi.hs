@@ -21,6 +21,7 @@ import Helper ( miningDevicePowerConsumption
                              , AntminerS17Vnish, AntminerS17_BOSPlus
                              )
               , Power (Watt), WorkMode (WorkMode))
+import qualified Data.HashMap.Strict as HM
 
 data QueryApi = QueryApi
   { command :: Text
@@ -34,20 +35,36 @@ data ReplyApi = ReplyApi
   { status  :: Maybe Array
   , stats   :: Maybe Array
   , summary :: Maybe Array
-  , _temps :: Maybe [BOSPlusTemp]
+  , bos_temps :: Maybe [BOSPlusTemp]
+  , bos_devs :: Maybe [BOSPlusDevs]
+  , bos_fan ::  Maybe [BOSPlusFan]
+  , bos_details ::  Maybe [BOSPlusDetails]
   } deriving (Generic, Show, Eq)
 instance FromJSON ReplyApi where
-  parseJSON = withObject "ReplyApi" $ \v -> ReplyApi
-    <$> v .: "STATUS"
-    <*> (v .:? "STATS")
-    <*> (v .:? "SUMMARY")
-    <*> (v .:? "TEMPS")
+  parseJSON = withObject "ReplyApi" $ \v -> do
+    ReplyApi
+      <$> v .:? "STATUS"
+      <*> (v .:? "STATS")
+      <*> (v .:? "SUMMARY")
+
+      -- Created a subparser to handle Parsing the temp, hash and fan
+      -- https://stackoverflow.com/questions/41207781/aeson-fromjson-with-nested-encoded-json
+      <*> parse' v "temps" "TEMPS" --result -- maybe (return Nothing) parseJSON t'
+      <*> parse' v "devs" "DEVS" -- return h_result
+      <*> parse' v "fans" "FANS"   -- 'return f_result
+      <*> parse' v "devdetails" "DEVDETAILS"   -- 'return f_result
+
+    where
+      parse' r' s1 s2 = do
+        t <- r' .:? s1
+        t' <- maybe HM.empty head t .:? s2
+        maybe (return Nothing) parseJSON t'
 
 data BOSPlusTemp = BOSPlusTemp
-  { temp_temp :: Scientific
-  , temp_id :: Scientific
-  , temp_board :: Scientific
-  , temp_chip :: Scientific
+  { _bos_temp_temp :: Scientific
+  , _bos_temp_id :: Scientific
+  , _bos_temp_board :: Scientific
+  , _bos_temp_chip :: Scientific
   } deriving (Generic, Show, Eq)
 instance FromJSON BOSPlusTemp where
   parseJSON = withObject "BOSPlusTemp" $ \v -> BOSPlusTemp
@@ -55,6 +72,39 @@ instance FromJSON BOSPlusTemp where
     <*> (v .: "ID")
     <*> (v .: "Board")
     <*> (v .: "Chip")
+
+data BOSPlusDevs = BOSPlusDevs
+  { _bos_devs_av :: Scientific
+  , _bos_devs_nominal :: Scientific
+  , _bos_devs_id :: Scientific
+  , _bos_devs_asc :: Scientific
+  } deriving (Generic, Show, Eq)
+instance FromJSON BOSPlusDevs where
+  parseJSON = withObject "BOSPlusHash" $ \v -> BOSPlusDevs
+    <$> v .: "MHS av"
+    <*> v .: "Nominal MHS"
+    <*> (v .: "ID")
+    <*> (v .: "ASC")
+
+data BOSPlusFan = BOSPlusFan
+  { _bos_fan_rpm :: Scientific
+  , _bos_fan_id :: Scientific
+  } deriving (Generic, Show, Eq)
+instance FromJSON BOSPlusFan where
+  parseJSON = withObject "BOSPlusHash" $ \v -> BOSPlusFan
+    <$> v .: "RPM"
+    <*> (v .: "ID")
+
+data BOSPlusDetails = BOSPlusDetails
+  { _bos_details_id :: Scientific
+  , _bos_details_voltage :: Scientific
+  , _bos_details_frequency :: Scientific
+  } deriving (Generic, Show, Eq)
+instance FromJSON BOSPlusDetails where
+  parseJSON = withObject "BOSPlusHash" $ \v -> BOSPlusDetails
+    <$> v .: "DEVDETAILS"
+    <*> (v .: "Voltage")
+    <*> (v .: "Frequency")
 
 data PowerStrategy = ConstantPower (Maybe Power)
                    -- | Watt per Gigahash
@@ -108,19 +158,38 @@ getSummary reply = flip parseEither reply $ \r -> do
   hrates <- parseTextListToRational ["MHS 5s"] rawStats
   return $ Stats Nothing Nothing temps hrates [] Nothing Nothing fans [] [] Nothing
 
--- | Parse temps from the "temps" API call from BOS+
-getTemps :: ReplyApi -> Either String Stats
-getTemps reply = flip parseEither reply $ \r -> do
-  let Just t = _temps r
+-- | Parse all relevant BOS+ stats from the "temps+devs+fans+devdetails" API call
+getBOSPlusStats :: ReplyApi -> Either String Stats
+getBOSPlusStats reply = flip parseEither reply $ \r -> do
+  let Just t = bos_temps r
+      Just h = bos_devs r
+      Just f = bos_fan r
+      Just d = bos_details r
 
-      temps = concat $
+      -- Convert into a like of type [(String,Rational)] for parsing into Nagios checks
+      concat' :: [a] -> (a -> Scientific)
+        -> [(Text
+            , a -> Scientific
+            , Rational)] -- Correct the unit to what is expected by Stat datatype
+        -> [(Text,Rational)]
+      concat' bs id' ls' = concat $
         (\_t ->
-           let Just _id = T.pack . show <$> (toBoundedInteger $ temp_temp _t :: Maybe Int)
-           in [ ("Board"<>_id, toRational $ temp_board _t)
-              , ("Chip"<>_id, toRational $ temp_chip _t)]
-        ) <$> t
+           let Just _id = T.pack . show <$> (toBoundedInteger $ id' _t :: Maybe Int)
+               lsF [] = []
+               lsF ((s,f',a'):ls) = (s<>_id, toRational (f' _t)/a'):lsF ls
+           in lsF ls'
+        ) <$> bs
 
-  return $ Stats Nothing Nothing temps [] [] Nothing Nothing [] [] [] Nothing
+      temps = concat' t _bos_temp_temp [("Board",_bos_temp_board,1),("Chip", _bos_temp_chip,1)]
+      hashes = concat' h _bos_devs_asc [("hash", _bos_devs_av,1000)]
+      nominalHashes = concat' h _bos_devs_asc [("hashNominal", _bos_devs_nominal, 1000)]
+      fanRPMs = concat' f _bos_fan_id [("fan", _bos_fan_rpm, 1)]
+      _voltages = concat' d _bos_details_id [("voltage", _bos_details_voltage, 1)]
+      _frequencies = concat' d _bos_details_id [("frequency", _bos_details_frequency, 1000000)]
+
+  let nominalTotal = sum $ snd <$> nominalHashes
+
+  return $ Stats Nothing Nothing temps hashes nominalHashes (Just nominalTotal) Nothing fanRPMs _voltages _frequencies Nothing
 
 -- | Parse `Stats` from STATS section of reply
 getStats :: ReplyApi -> Either String Stats
