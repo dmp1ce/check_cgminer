@@ -4,6 +4,12 @@ jobs:
     docker:
       - image: fpco/stack-build:lts
     steps:
+      - run:
+          name: Update APT
+          command: apt update
+      - run:
+          name: Install SSH
+          command: apt install --no-install-recommends -y ssh
       - checkout
       - restore_cache:
           # Read about caching dependencies: https://circleci.com/docs/2.0/caching/
