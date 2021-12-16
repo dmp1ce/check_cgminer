@@ -1,5 +1,9 @@
 # Changelog for check_cgminer
 
+## 0.7.12.0
+
+- Add BOS+ firmware support for S17 miners
+
 ## 0.7.11.0
 
 - Add delayedCacheIO function for making sure resources don't get overrun when caches expire

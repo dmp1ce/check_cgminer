@@ -11,7 +11,7 @@ Tested devices:
 - S9k (missing power consumption default)
 - S9se
 - S15
-- S17
+- S17 (and S17 [BOS+ firmware](https://docs.braiins.com/os/20.09/plus-en/index.html#))
 - Z9-mini (missing power consumption default and ideal hashrate percentage)
 - Whatsminer (missing power consumption default and ideal hashrate percentage)
 
