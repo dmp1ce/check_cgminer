@@ -112,3 +112,24 @@ OK: Profitability is 4.9064 USD/day, Max temp: 80.0 C, Min hashrate: 18647.21 Gh
 - Pool fee percentage (Uses 0% fee as default)
 
 If any of the factors fail to be collected then profitability will not be calculated.
+
+## Snap
+
+The `check_cgminer` Snap is intended to privide a easy way to get starting with this check. However, there is a known issue with the default `nagios` user for most nagios setups.
+
+### Bind mount
+
+`check_cgminer` requires access to the home directory to quickly calculate profitability for miners. The `nagios` user requires a home directory "bind mount" because of a limitation of strict confinenment of snaps. [See documentation on snapcraft.io for applying the bind mount.](https://snapcraft.io/docs/home-outside-home). Also, see #1 for history about this issue.
+
+#### Example bind mount
+
+These commands worked for me in allowing Nagios to work with `check_cgminer` on a standard Ubuntu 20.04 install.
+
+```
+$ sudo mkdir -p /home/nagios
+$ sudo mount --bind /var/lib/nagios /home/nagios
+$ cp /etc/passwd passwd.backup
+$ awk -vold=$"/var/lib/nagios" -vnew=$"/home/nagios" -F: ' BEGIN {OFS = ":"} \
+  {sub(old,new,$6);print}' /etc/passwd > passwd.new
+$ sudo cp passwd.new /etc/passwd
+```
